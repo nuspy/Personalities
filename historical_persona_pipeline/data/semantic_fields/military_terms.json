@@ -1,0 +1,32 @@
+{
+  "it": [
+    "legione", "coorte", "centurione", "accampamento", "assedio",
+    "battaglia", "vittoria", "nemico", "esercito", "cavalieri",
+    "fanti", "armi", "spada", "scudo", "fortificazione", "ponte",
+    "retroguardia", "avanguardia", "colonna", "trincea", "mura",
+    "torre", "catapulta", "ariete", "soldato", "generale", "comandante"
+  ],
+  "en": [
+    "legion", "cohort", "centurion", "camp", "siege",
+    "battle", "victory", "enemy", "army", "cavalry",
+    "infantry", "weapons", "sword", "shield", "fortification", "bridge",
+    "rearguard", "vanguard", "column", "trench", "walls",
+    "tower", "catapult", "battering ram", "soldier", "general", "commander"
+  ],
+  "la": [
+    "legio", "cohors", "centurio", "castra", "obsidio",
+    "proelium", "victoria", "hostis", "exercitus", "equites",
+    "pedites", "arma", "gladius", "scutum", "munitio", "pons",
+    "agmen novissimum", "agmen primum", "agmen", "fossa", "murus"
+  ],
+  "fr": [
+    "légion", "cohorte", "centurion", "camp", "siège",
+    "bataille", "victoire", "ennemi", "armée", "cavalerie",
+    "infanterie", "armes", "épée", "bouclier", "fortification"
+  ],
+  "de": [
+    "Legion", "Kohorte", "Zenturio", "Lager", "Belagerung",
+    "Schlacht", "Sieg", "Feind", "Armee", "Kavallerie",
+    "Infanterie", "Waffen", "Schwert", "Schild", "Befestigung"
+  ]
+}

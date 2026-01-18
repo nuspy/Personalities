@@ -1,0 +1,74 @@
+{
+  "clementia": {
+    "keywords": {
+      "it": ["clemenza", "perdonare", "risparmiare", "grazia", "indulgenza", "misericordia"],
+      "en": ["clemency", "forgive", "spare", "mercy", "leniency"],
+      "la": ["clementia", "parcere", "ignoscere", "venia"]
+    },
+    "weight": 1.0,
+    "description": "Mercy and forgiveness toward defeated enemies"
+  },
+  "dignitas": {
+    "keywords": {
+      "it": ["dignità", "onore", "rango", "prestigio", "rispetto", "reputazione"],
+      "en": ["dignity", "honor", "rank", "prestige", "respect", "reputation"],
+      "la": ["dignitas", "honor", "decus", "existimatio"]
+    },
+    "weight": 1.0,
+    "description": "Personal dignity, social standing, and reputation"
+  },
+  "virtus": {
+    "keywords": {
+      "it": ["virtù", "coraggio", "valore", "prodezza", "fortezza", "bravura"],
+      "en": ["virtue", "courage", "valor", "prowess", "bravery"],
+      "la": ["virtus", "fortitudo", "audacia"]
+    },
+    "weight": 1.0,
+    "description": "Courage, excellence, and manly virtue"
+  },
+  "fides": {
+    "keywords": {
+      "it": ["fede", "lealtà", "fiducia", "parola", "giuramento", "fedeltà"],
+      "en": ["faith", "loyalty", "trust", "word", "oath", "faithfulness"],
+      "la": ["fides", "fidelitas", "iusiurandum"]
+    },
+    "weight": 1.0,
+    "description": "Trustworthiness, keeping one's word"
+  },
+  "pietas": {
+    "keywords": {
+      "it": ["pietà", "devozione", "rispetto", "dovere", "religione"],
+      "en": ["piety", "devotion", "duty", "respect", "religion"],
+      "la": ["pietas", "religio", "officium"]
+    },
+    "weight": 0.8,
+    "description": "Duty toward gods, family, and country"
+  },
+  "gloria": {
+    "keywords": {
+      "it": ["gloria", "fama", "celebre", "immortale", "memorabile", "illustre"],
+      "en": ["glory", "fame", "renowned", "immortal", "memorable", "illustrious"],
+      "la": ["gloria", "fama", "laus", "decus"]
+    },
+    "weight": 0.9,
+    "description": "Glory and fame for great deeds"
+  },
+  "celeritas": {
+    "keywords": {
+      "it": ["velocità", "rapidamente", "subito", "immediato", "senza indugio", "celermente"],
+      "en": ["speed", "quickly", "immediately", "swiftly", "without delay"],
+      "la": ["celeritas", "celeriter", "statim", "confestim"]
+    },
+    "weight": 0.7,
+    "description": "Speed and decisiveness in action"
+  },
+  "gravitas": {
+    "keywords": {
+      "it": ["gravità", "serietà", "peso", "autorità", "solennità"],
+      "en": ["gravity", "seriousness", "weight", "authority", "solemnity"],
+      "la": ["gravitas", "auctoritas", "severitas"]
+    },
+    "weight": 0.8,
+    "description": "Seriousness, dignity, and weight of character"
+  }
+}

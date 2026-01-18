@@ -1,0 +1,43 @@
+Metadata-Version: 2.4
+Name: historical-persona-pipeline
+Version: 0.1.0
+Summary: Pipeline end-to-end per creare e addestrare Personaggi Storici basati su LLM
+Author-email: Gemini Agent <agent@example.com>
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: PyQt6>=6.5.0
+Requires-Dist: pydantic>=2.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: python-magic-bin>=0.4.14; sys_platform == "win32"
+Requires-Dist: python-magic>=0.4.27; sys_platform != "win32"
+Requires-Dist: spacy>=3.7.0
+Requires-Dist: langdetect>=1.0.9
+Requires-Dist: cltk>=1.1.0
+Requires-Dist: huspacy>=0.11.0
+Requires-Dist: spacy-transformers
+Requires-Dist: PyMuPDF>=1.23.0
+Requires-Dist: python-docx>=1.0.0
+Requires-Dist: ebooklib>=0.18
+Requires-Dist: beautifulsoup4>=4.12.0
+Requires-Dist: lxml>=4.9.0
+Requires-Dist: olefile>=0.46
+Requires-Dist: torch>=2.1.0
+Requires-Dist: transformers<=4.57.3,>=4.51.3
+Requires-Dist: datasets>=2.16.0
+Requires-Dist: peft>=0.7.0
+Requires-Dist: trl>=0.7.0
+Requires-Dist: accelerate>=0.25.0
+Requires-Dist: bitsandbytes>=0.41.0
+Requires-Dist: scikit-learn>=1.3.0
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: openai>=1.0.0
+Requires-Dist: anthropic>=0.18.0
+Requires-Dist: requests>=2.31.0
+Requires-Dist: tqdm>=4.66.0
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: black; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Provides-Extra: training
+Requires-Dist: unsloth[colab-new]@ git+https://github.com/unslothai/unsloth.git ; extra == "training"

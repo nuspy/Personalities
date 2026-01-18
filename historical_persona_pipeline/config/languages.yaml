@@ -1,0 +1,62 @@
+# Language Configuration
+
+languages:
+  it:
+    name: "Italian"
+    spacy_model: "it_core_news_lg"
+    type: "modern"
+    
+  en:
+    name: "English"
+    spacy_model: "en_core_web_lg"
+    type: "modern"
+    
+  fr:
+    name: "French"
+    spacy_model: "fr_core_news_lg"
+    type: "modern"
+    
+  de:
+    name: "German"
+    spacy_model: "de_core_news_lg"
+    type: "modern"
+
+  hu:
+    name: "Hungarian"
+    spacy_model: "hu_core_news_trf"
+    type: "modern"
+    
+  es:
+    name: "Spanish"
+    spacy_model: "es_core_news_lg"
+    type: "modern"
+    
+  pt:
+    name: "Portuguese"
+    spacy_model: "pt_core_news_lg"
+    type: "modern"
+    
+  ru:
+    name: "Russian"
+    spacy_model: "ru_core_news_lg"
+    type: "modern"
+    
+  uk:
+    name: "Ukrainian"
+    spacy_model: "uk_core_news_lg"
+    type: "modern"
+    
+  el:
+    name: "Modern Greek"
+    spacy_model: "el_core_news_lg"
+    type: "modern"
+    
+  grc:
+    name: "Ancient Greek"
+    cltk_language: "grc"
+    type: "classical"
+    
+  la:
+    name: "Latin"
+    cltk_language: "lat"
+    type: "classical"
