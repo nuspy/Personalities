@@ -38,6 +38,7 @@ from ...guards.groundcheck import Giudice, controlla_citazioni
 from ...guards.policy import RegistroGuardrail
 from ...knowledge.embedding import Embedder
 from ...knowledge.retriever import Retriever
+from ...memory.retrieval import MemoryRetriever
 from ...llm.base import (
     GenerationError, GenerationRequest, LLMProvider, Message as LLMMessage,
     TruncatedResponse,
@@ -201,6 +202,25 @@ async def chat(
         retriever=Retriever(session, embedder) if kb_ids else None,
     )
 
+    # Le memorie entrano nello strato 1, sotto il punto di cache: cambiano a
+    # ogni turno, e metterle sopra annullerebbe lo sconto sul prefisso.
+    memorie: List[str] = []
+    memorie_usate = []
+    if versione is not None and (versione.memory_config or {}).get("enabled", True):
+        recuperatore = MemoryRetriever(session, embedder)
+        memorie_usate = await recuperatore.cerca(
+            user_id=user.id,
+            domanda=payload.message,
+            personality_id=versione.personality_id,
+            limite=int((versione.memory_config or {}).get("max_memories", 5)),
+        )
+        memorie = [m.memoria.content for m in memorie_usate]
+        if memorie_usate:
+            # Usarle le rende insieme più recenti e più frequenti: è come
+            # funziona ricordarsi di qualcosa.
+            await recuperatore.segna_usate(memorie_usate)
+            await session.commit()
+
     turno = None
     rubriche = []
     if versione is not None:
@@ -209,6 +229,7 @@ async def chat(
             domanda=payload.message,
             kb_ids=kb_ids,
             storico=messaggi_storico,
+            memorie=memorie,
             # La metà preventiva dei guardrail entra nello strato stabile:
             # costa una volta sola perché sta nel prefisso, e agisce prima che
             # il problema esista.

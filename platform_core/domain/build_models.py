@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import (
     BigInteger, CheckConstraint, DateTime, ForeignKey, Index, Integer, String,
-    Text, UniqueConstraint, Uuid,
+    Text, Uuid,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -144,9 +144,9 @@ class BuildEvent(Base):
 class RuntimeBinding(Base, TimestampMixin):
     """Quale realizzazione una personalità sta effettivamente usando.
 
-    Una riga per personalità, e il vincolo di unicità lo impone: due build
-    attive contemporaneamente per la stessa voce sarebbero una domanda senza
-    risposta al momento di servirla.
+    Una riga per personalità, e lo impone la chiave primaria: due build attive
+    contemporaneamente per la stessa voce sarebbero una domanda senza risposta
+    al momento di servirla.
 
     `mode` può valere `rag` anche con una build presente: è la degradazione
     dichiarata — se il worker che serviva quel LoRA non c'è più, si risponde in
@@ -167,9 +167,12 @@ class RuntimeBinding(Base, TimestampMixin):
     #: di un provider remoto.
     serving: Mapped[Optional[str]] = mapped_column(String(80))
 
+    # Nessun vincolo di unicita' esplicito: `personality_id` e' gia' chiave
+    # primaria, quindi «una riga per personalita'» e' gia' garantito.
+    # Dichiararlo due volte faceva riprovare ad Alembic la stessa creazione a
+    # ogni autogenerazione successiva.
     __table_args__ = (
         CheckConstraint(
             "mode in ('rag', 'lora', 'finetune')", name="ck_runtime_mode",
         ),
-        UniqueConstraint("personality_id", name="uq_runtime_una_per_personalita"),
     )
