@@ -1,0 +1,121 @@
+# Stack di sviluppo della piattaforma.
+#
+# `docker compose up -d` porta in piedi tutto ciò che serve per lavorare:
+# database con pgvector, Redis, Keycloak già configurato, raccolta delle
+# tracce, API e worker.
+#
+# Il worker con acceleratore non è qui: gira sulla macchina dell'operatore con
+# `python -m platform_core.worker --role gpu`, perché l'accesso alla GPU da
+# Docker Desktop su Windows richiede una configurazione che non vale la pena
+# imporre a chi vuole solo far partire lo stack. In Kubernetes diventa un
+# deployment con `nvidia.com/gpu`.
+
+name: personalities
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: persona
+      POSTGRES_PASSWORD: persona
+      POSTGRES_DB: persona
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U persona -d persona"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    # Le annunci delle capacità hanno già una scadenza propria e si
+    # ricostruiscono da soli al battito successivo: persisterli non serve.
+    command: redis-server --save "" --appendonly no
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      KC_DB: dev-file
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./deploy/keycloak/realm-personalities.json:/opt/keycloak/data/import/realm.json:ro
+    healthcheck:
+      # L'immagine non ha curl: si usa il file descriptor di rete della shell.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q 'UP' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./deploy/otel/config.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4318:4318"   # OTLP/HTTP
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # interfaccia web
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.backend
+    command: uvicorn platform_core.api.app:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      PERSONA_ROLE: api
+      PERSONA_ENVIRONMENT: dev
+      PERSONA_DATABASE_URL: postgresql+psycopg://persona:persona@postgres:5432/persona
+      PERSONA_REDIS_URL: redis://redis:6379/0
+      PERSONA_KEYCLOAK_URL: http://keycloak:8080
+      PERSONA_OTLP_ENDPOINT: http://otel-collector:4318
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./platform_core:/app/platform_core
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker-cpu:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.backend
+    command: python -m platform_core.worker --role cpu
+    environment:
+      PERSONA_ROLE: worker-cpu
+      PERSONA_ENVIRONMENT: dev
+      PERSONA_DATABASE_URL: postgresql+psycopg://persona:persona@postgres:5432/persona
+      PERSONA_REDIS_URL: redis://redis:6379/0
+      PERSONA_OTLP_ENDPOINT: http://otel-collector:4318
+    volumes:
+      - ./platform_core:/app/platform_core
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

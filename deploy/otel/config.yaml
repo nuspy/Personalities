@@ -1,0 +1,29 @@
+# Raccolta delle tracce. Il collector sta in mezzo di proposito: i servizi
+# parlano solo con lui, e cambiare dove finiscono le tracce non richiede di
+# riconfigurare le applicazioni.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch:
+    timeout: 5s
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger, debug]

@@ -1,0 +1,115 @@
+{
+  "_commento": "Realm importato all'avvio di Keycloak in sviluppo. Contiene i due ruoli della specifica (user, admin), un client pubblico per il frontend e uno confidenziale per l'API, piu' due utenti di prova. Gli identity provider Google/Facebook/Apple si aggiungono qui quando ci saranno le credenziali: la struttura li accetta senza modifiche al codice. NON usare questo file in produzione: le password sono note e il client segreto e' un segnaposto.",
+
+  "realm": "personalities",
+  "enabled": true,
+  "displayName": "AI Personality Platform",
+  "loginWithEmailAllowed": true,
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "verifyEmail": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "editUsernameAllowed": false,
+
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+
+  "roles": {
+    "realm": [
+      {
+        "name": "user",
+        "description": "Utente finale: conversa con le personalita' a cui il suo piano da' accesso"
+      },
+      {
+        "name": "admin",
+        "description": "Amministratore: gestisce personalita', knowledge base, provider e utenti"
+      }
+    ]
+  },
+
+  "defaultRoles": ["user"],
+
+  "clients": [
+    {
+      "clientId": "persona-frontend",
+      "name": "Frontend utente",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "https://personalities.tadamoo.com/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000",
+        "https://personalities.tadamoo.com"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "persona-admin",
+      "name": "Console di amministrazione",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3001/*",
+        "https://admin.personalities.tadamoo.com/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3001",
+        "https://admin.personalities.tadamoo.com"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "persona-api",
+      "name": "API",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "secret": "sviluppo-non-usare-in-produzione",
+      "attributes": {
+        "access.token.lifespan": "900"
+      }
+    }
+  ],
+
+  "users": [
+    {
+      "username": "utente@example.com",
+      "email": "utente@example.com",
+      "firstName": "Utente",
+      "lastName": "Di Prova",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "utente", "temporary": false }
+      ],
+      "realmRoles": ["user"]
+    },
+    {
+      "username": "admin@example.com",
+      "email": "admin@example.com",
+      "firstName": "Amministratore",
+      "lastName": "Di Prova",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "admin", "temporary": false }
+      ],
+      "realmRoles": ["user", "admin"]
+    }
+  ]
+}
