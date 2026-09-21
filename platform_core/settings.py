@@ -30,13 +30,24 @@ class Settings(BaseSettings):
     environment: Literal["dev", "staging", "prod"] = "dev"
 
     # --- supporti ----------------------------------------------------------
-    database_url: str = "postgresql+psycopg://persona:persona@localhost:5432/persona"
+    #: Il valore predefinito e' quello per un processo avviato **sull'host**,
+    #: e punta alla 5433 perche' e' li' che Compose espone il database: la 5432
+    #: e' spesso gia' occupata da un PostgreSQL di sistema. I container
+    #: ricevono `PERSONA_DATABASE_URL` con `postgres:5432` e non usano questo.
+    database_url: str = "postgresql+psycopg://persona:persona@localhost:5433/persona"
     redis_url: str = "redis://localhost:6379/0"
 
     # --- identita' degli utenti -------------------------------------------
     keycloak_url: str = "http://localhost:8080"
     keycloak_realm: str = "personalities"
     keycloak_client_id: str = "persona-api"
+    #: Altri client del realm i cui token questa API accetta. Il frontend ne fa
+    #: parte: il token che riceve e' emesso per `persona-frontend`, e se non
+    #: fosse elencato qui ogni richiesta dell'interfaccia verrebbe respinta —
+    #: con un 401 che sembrerebbe un problema di login. Resta un elenco chiuso
+    #: perche' accettare qualunque destinatario significa accettare i token di
+    #: qualunque applicazione che usi lo stesso realm.
+    keycloak_accepted_audiences: tuple[str, ...] = ("persona-frontend", "persona-admin")
     #: In sviluppo l'autenticazione puo' essere disattivata per provare gli
     #: endpoint senza avviare Keycloak. Va negata fuori dallo sviluppo, e il
     #: controllo e' in `validate_production()`: un flag simile lasciato acceso
@@ -54,6 +65,17 @@ class Settings(BaseSettings):
     #: Motori locali raggiungibili, da cui dipendono inferenza locale e CAG
     #: con KV-cache. Sono servizi remoti, non capacita' del cluster.
     local_engine_urls: List[str] = Field(default_factory=list)
+
+    #: Endpoint predefinito per la generazione. LM Studio, vLLM e OpenAI
+    #: parlano lo stesso dialetto, quindi cambiare fornitore e' cambiare questo
+    #: indirizzo — finche' la fase 1 non porta il registro di llmswitch.
+    llm_base_url: str = "http://127.0.0.1:1234/v1"
+    llm_model: str = ""          # vuoto: si usa il primo modello caricato
+    llm_api_key: str = "non-serve-in-locale"
+    #: Oltre questo tempo senza un singolo token la richiesta viene interrotta.
+    #: E' un timeout fra i token, non sulla durata totale: una risposta lunga e'
+    #: legittima, un silenzio di due minuti no.
+    llm_stream_timeout: float = 120.0
 
     cors_origins: List[str] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://localhost:3001"]

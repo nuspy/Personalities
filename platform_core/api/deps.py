@@ -57,7 +57,24 @@ def get_capability_registry() -> CapabilityRegistry:
     return CapabilityRegistry(get_key_value_store())
 
 
+@lru_cache(maxsize=1)
+def get_llm_provider():
+    """Il fornitore di generazione, condiviso fra le richieste.
+
+    Condiviso e non creato ogni volta: l'oggetto ricorda quale modello il
+    server ha caricato, e costruirne uno nuovo a ogni domanda significa
+    chiedere di nuovo l'elenco dei modelli prima di ogni singola risposta —
+    una chiamata di rete in piu' sul percorso piu' sensibile alla latenza che
+    ci sia. Non tiene connessioni aperte: il client HTTP nasce e muore dentro
+    ciascuna generazione.
+    """
+    from ..llm.openai_compatible import OpenAICompatibleProvider
+
+    return OpenAICompatibleProvider()
+
+
 def reset_dependencies() -> None:
     """Dimentica le istanze memorizzate. Solo per i test."""
     get_key_value_store.cache_clear()
     get_capability_registry.cache_clear()
+    get_llm_provider.cache_clear()

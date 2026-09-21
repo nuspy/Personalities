@@ -1,9 +1,11 @@
 """Applicazione FastAPI.
 
-Fase 0 dello scheletro verticale: salute del servizio e capacita' della
-piattaforma. Gli endpoint di conversazione arrivano con la fase 1; questi due
-esistono perche' tutto il resto vi si appoggia — il frontend si configura
-dalle capacita', e il deploy si fida della salute.
+Fase 0 dello scheletro verticale: salute del servizio, capacita' della
+piattaforma e conversazione in streaming. Quest'ultima risponde ancora senza
+personalita' — gli strati del prompt, il recupero e la memoria entrano nelle
+fasi successive, nello stesso punto. Lo scopo qui e' dimostrare che il
+percorso regge da capo a fondo: token, utente, conversazione, modello,
+persistenza, traccia.
 """
 from __future__ import annotations
 
@@ -15,8 +17,12 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from ..observability.correlation import correlation_scope
+from ..observability.tracing import (
+    instrument_engine, setup_tracing, span_corrente_con_correlazione,
+)
 from ..settings import get_settings
-from .routers import capabilities
+from .routers import capabilities, chat
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +55,22 @@ async def lifespan(app: FastAPI):
             "Accettabile solo in sviluppo."
         )
 
+    # Il motore si costruisce qui e non alla prima richiesta: cosi' un errore
+    # nella stringa di connessione si vede all'avvio. La strumentazione di
+    # FastAPI invece e' gia' stata agganciata in `create_app()`, prima che
+    # Starlette congelasse la catena dei middleware.
+    try:
+        from ..domain.session import get_engine
+
+        instrument_engine(get_engine())
+    except Exception as exc:
+        logger.error("Motore di database non inizializzato: %s", exc)
+
     yield
 
+    from ..domain.session import dispose_engine
+
+    await dispose_engine()
     logger.info("Arresto di %s", settings.service_name)
 
 
@@ -82,7 +102,13 @@ def create_app() -> FastAPI:
         value = request.headers.get(CORRELATION_HEADER) or str(uuid.uuid4())
         request.state.correlation_id = value
 
-        response = await call_next(request)
+        # Anche nella variabile di contesto: `request.state` e' raggiungibile
+        # solo da chi ha l'oggetto richiesta sottomano, e gli strati in fondo
+        # — repository, client dei modelli — non ce l'hanno.
+        with correlation_scope(value):
+            span_corrente_con_correlazione()
+            response = await call_next(request)
+
         response.headers[CORRELATION_HEADER] = value
         return response
 
@@ -98,6 +124,15 @@ def create_app() -> FastAPI:
         return {"status": "ok", "service": get_settings().service_name}
 
     app.include_router(capabilities.router)
+    app.include_router(chat.router)
+
+    # Qui e non nel lifespan: la strumentazione di FastAPI inserisce un
+    # middleware ASGI, e Starlette costruisce la catena dei middleware alla
+    # prima richiesta — agganciarla dopo significa non agganciarla affatto,
+    # senza che nulla lo segnali. Il sintomo e' sottile: le tracce arrivano
+    # lo stesso, ma contengono solo le chiamate in uscita e mai la richiesta
+    # che le ha causate.
+    setup_tracing(app)
 
     @app.exception_handler(Exception)
     async def unhandled(request: Request, exc: Exception):

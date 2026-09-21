@@ -20,7 +20,13 @@ services:
       POSTGRES_PASSWORD: persona
       POSTGRES_DB: persona
     ports:
-      - "5432:5432"
+      # 5433 e non 5432: su una macchina di sviluppo capita spesso che un
+      # PostgreSQL installato nel sistema occupi già la porta canonica. Windows
+      # permette a entrambi il bind senza segnalare nulla, e le connessioni
+      # finiscono a quello sbagliato — che risponde «password authentication
+      # failed», mandando a cercare il problema nelle credenziali.
+      # Dentro la rete di Compose i servizi continuano a usare postgres:5432.
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -82,7 +88,10 @@ services:
     build:
       context: .
       dockerfile: deploy/Dockerfile.backend
-    command: uvicorn platform_core.api.app:app --host 0.0.0.0 --port 8000 --reload
+    # `python -m` e non `uvicorn` direttamente: il punto d'ingresso sceglie
+    # l'event loop adatto alla piattaforma (su Windows psycopg non funziona con
+    # quello predefinito). In Linux il risultato è identico.
+    command: python -m platform_core.api --host 0.0.0.0 --port 8000 --reload
     environment:
       PERSONA_ROLE: api
       PERSONA_ENVIRONMENT: dev

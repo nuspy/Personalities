@@ -68,6 +68,14 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
+    # I test della piattaforma sono asincroni: senza questo plugin vengono
+    # saltati, e una suite che salta i test dell'isolamento fra utenti resta
+    # verde mentre non verifica nulla.
+    "pytest-asyncio>=0.24",
+    # Serve a firmare i token di prova con chiavi vere invece di simulare la
+    # verifica. E' gia' una dipendenza indiretta di python-jose[cryptography],
+    # ma qui e' un requisito diretto dei test.
+    "cryptography>=43",
     "black",
     "ruff"
 ]
@@ -128,3 +136,14 @@ persona = "historical_persona_pipeline.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["historical_persona_pipeline*", "platform_core*"]
+[tool.pytest.ini_options]
+# `auto`: i test asincroni non hanno bisogno di essere marcati uno per uno.
+# Con la modalità stretta, un `async def test_...` senza marcatore viene
+# saltato con un avviso — e un test saltato in silenzio è peggio di uno che
+# fallisce, perché la suite resta verde.
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+testpaths = ["platform_core/tests", "historical_persona_pipeline/tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:pydantic.*",
+]

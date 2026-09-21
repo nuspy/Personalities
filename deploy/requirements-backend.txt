@@ -14,4 +14,8 @@ python-jose[cryptography]>=3.3
 opentelemetry-api>=1.28
 opentelemetry-sdk>=1.28
 opentelemetry-instrumentation-fastapi>=0.49b0
+# Le query e le chiamate ai modelli: senza queste due, una traccia mostra la
+# richiesta e nient'altro, proprio dove il tempo passa davvero.
+opentelemetry-instrumentation-sqlalchemy>=0.49b0
+opentelemetry-instrumentation-httpx>=0.49b0
 opentelemetry-exporter-otlp-proto-http>=1.28

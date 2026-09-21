@@ -1,6 +1,4 @@
 {
-  "_commento": "Realm importato all'avvio di Keycloak in sviluppo. Contiene i due ruoli della specifica (user, admin), un client pubblico per il frontend e uno confidenziale per l'API, piu' due utenti di prova. Gli identity provider Google/Facebook/Apple si aggiungono qui quando ci saranno le credenziali: la struttura li accetta senza modifiche al codice. NON usare questo file in produzione: le password sono note e il client segreto e' un segnaposto.",
-
   "realm": "personalities",
   "enabled": true,
   "displayName": "AI Personality Platform",
@@ -11,11 +9,9 @@
   "resetPasswordAllowed": true,
   "rememberMe": true,
   "editUsernameAllowed": false,
-
   "accessTokenLifespan": 900,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 36000,
-
   "roles": {
     "realm": [
       {
@@ -25,12 +21,26 @@
       {
         "name": "admin",
         "description": "Amministratore: gestisce personalita', knowledge base, provider e utenti"
+      },
+      {
+        "name": "default-roles-personalities",
+        "description": "Assegnato automaticamente a ogni nuovo utente",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "user"
+          ],
+          "client": {
+            "account": [
+              "view-profile",
+              "manage-account"
+            ]
+          }
+        },
+        "clientRole": false
       }
     ]
   },
-
-  "defaultRoles": ["user"],
-
   "clients": [
     {
       "clientId": "persona-frontend",
@@ -83,9 +93,17 @@
       "attributes": {
         "access.token.lifespan": "900"
       }
+    },
+    {
+      "clientId": "persona-test",
+      "name": "Client per i test automatici (solo sviluppo)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false
     }
   ],
-
   "users": [
     {
       "username": "utente@example.com",
@@ -95,9 +113,15 @@
       "enabled": true,
       "emailVerified": true,
       "credentials": [
-        { "type": "password", "value": "utente", "temporary": false }
+        {
+          "type": "password",
+          "value": "utente",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["user"]
+      "realmRoles": [
+        "user"
+      ]
     },
     {
       "username": "admin@example.com",
@@ -107,9 +131,22 @@
       "enabled": true,
       "emailVerified": true,
       "credentials": [
-        { "type": "password", "value": "admin", "temporary": false }
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["user", "admin"]
+      "realmRoles": [
+        "user",
+        "admin"
+      ]
     }
-  ]
+  ],
+  "defaultRole": {
+    "name": "default-roles-personalities",
+    "description": "Ruoli assegnati a ogni nuovo utente",
+    "composite": true,
+    "clientRole": false
+  }
 }
