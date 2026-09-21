@@ -1,0 +1,392 @@
+/* La pagina di lettura.
+ *
+ * L'impianto è quello di un'edizione annotata: una colonna di testo di misura
+ * leggibile e, a sinistra, il margine dove vivono le annotazioni. Su schermo
+ * stretto il margine non si comprime — diventerebbe illeggibile — ma si
+ * ricompone sopra il turno, dove resta una riga di intestazione.
+ */
+
+.pagina {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+/* ---- testata ---- */
+
+.testata {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem clamp(1rem, 4vw, 2rem);
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+  border-bottom: 1px solid var(--filo-tenue);
+  background: color-mix(in srgb, var(--carta) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.marchio {
+  font-family: var(--display), serif;
+  font-size: 1.35rem;
+  letter-spacing: -0.015em;
+  margin-right: auto;
+}
+
+.marchio span {
+  color: var(--rubrica);
+}
+
+.azioneTestata {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--filo);
+  background: transparent;
+  color: var(--inchiostro-tenue);
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.8125rem;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.azioneTestata:hover {
+  border-color: var(--inchiostro-debole);
+  color: var(--inchiostro);
+}
+
+/* ---- corpo ---- */
+
+.lettura {
+  flex: 1;
+  overflow-y: auto;
+  padding: clamp(1.5rem, 5vw, 3rem) clamp(1rem, 4vw, 2rem) 0;
+}
+
+.colonna {
+  max-width: calc(var(--misura-lettura) + var(--margine-apparato));
+  margin: 0 auto;
+  padding-bottom: 2rem;
+}
+
+/* ---- il turno, con il suo margine ---- */
+
+.turno {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.25rem;
+  padding: 1.25rem 0;
+  border-top: 1px solid var(--filo-tenue);
+}
+
+.turno:first-child {
+  border-top: none;
+}
+
+@media (min-width: 52rem) {
+  .turno {
+    grid-template-columns: var(--margine-apparato) 1fr;
+    gap: 1.5rem;
+  }
+}
+
+/* Il margine: l'elemento firma. Porta il segno di chi parla, l'ora e — dalla
+ * fase 1 — i riferimenti numerati ai passaggi recuperati. È una colonna di
+ * apparato, quindi monospaziata e allineata a destra contro il filo del testo. */
+.margine {
+  font-family: var(--apparato), monospace;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--inchiostro-debole);
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+@media (min-width: 52rem) {
+  .margine {
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
+    gap: 0.15rem;
+    padding-top: 0.3rem;
+  }
+}
+
+.segno {
+  color: var(--rubrica);
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.chi {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+}
+
+.ora {
+  font-variant-numeric: tabular-nums;
+}
+
+.testo {
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* La domanda si distingue per rientro e colore, non per fumetto: in una
+ * pagina di lettura un contenitore arrotondato spezzerebbe la colonna. */
+.turnoUtente .testo {
+  color: var(--inchiostro-tenue);
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 1rem;
+}
+
+/* ---- il cursore di composizione ---- */
+
+.cursore {
+  display: inline-block;
+  width: 0.5em;
+  height: 1.05em;
+  margin-left: 0.08em;
+  vertical-align: text-bottom;
+  background: var(--rubrica);
+  animation: battito 1.1s steps(2, start) infinite;
+}
+
+@keyframes battito {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
+.pensa {
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  color: var(--inchiostro-debole);
+  font-style: normal;
+}
+
+.errore {
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.9375rem;
+  color: var(--allarme);
+  border-left: 2px solid var(--allarme);
+  padding-left: 0.75rem;
+}
+
+/* ---- prima schermata ---- */
+
+.soglia {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 55vh;
+  gap: 1rem;
+}
+
+.sogliaTitolo {
+  font-size: clamp(2rem, 7vw, 3rem);
+  line-height: 1.05;
+}
+
+.sogliaTesto {
+  color: var(--inchiostro-tenue);
+  max-width: 46ch;
+  font-size: 1.0625rem;
+}
+
+.nota {
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  color: var(--inchiostro-debole);
+  border-top: 1px solid var(--filo-tenue);
+  padding-top: 0.75rem;
+  max-width: 52ch;
+}
+
+/* ---- composizione ---- */
+
+.composer {
+  position: sticky;
+  bottom: 0;
+  background: color-mix(in srgb, var(--carta) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--filo-tenue);
+  padding: 0.75rem clamp(1rem, 4vw, 2rem);
+  /* La barra di gesture di iOS morde gli ultimi millimetri: senza questo, il
+   * bordo inferiore del campo è raggiungibile ma non toccabile. */
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.composerColonna {
+  max-width: calc(var(--misura-lettura) + var(--margine-apparato));
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.campo {
+  flex: 1;
+  resize: none;
+  border: 1px solid var(--filo);
+  background: var(--superficie);
+  border-radius: var(--raggio);
+  padding: 0.75rem 0.875rem;
+  /* 16px esatti: sotto questa soglia iOS ingrandisce la pagina al focus, e
+   * l'utente si ritrova con il layout spostato a ogni tocco sul campo. */
+  font-size: 1rem;
+  font-family: var(--interfaccia), sans-serif;
+  line-height: 1.5;
+  max-height: 40vh;
+  min-height: 48px;
+  transition: border-color 0.15s;
+}
+
+.campo:focus {
+  border-color: var(--inchiostro-debole);
+  outline: none;
+}
+
+.campo:focus-visible {
+  outline: 2px solid var(--rubrica);
+  outline-offset: 1px;
+}
+
+.campo::placeholder {
+  color: var(--inchiostro-debole);
+}
+
+.invia {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--inchiostro);
+  background: var(--inchiostro);
+  color: var(--carta);
+  transition: opacity 0.15s;
+}
+
+.invia:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.invia:not(:disabled):hover {
+  opacity: 0.85;
+}
+
+.ferma {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--filo);
+  background: transparent;
+  color: var(--inchiostro-tenue);
+}
+
+.suggerimento {
+  max-width: calc(var(--misura-lettura) + var(--margine-apparato));
+  margin: 0.4rem auto 0;
+  font-family: var(--apparato), monospace;
+  font-size: 0.6875rem;
+  color: var(--inchiostro-debole);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* Su touch la scorciatoia da tastiera non esiste: dirla sarebbe rumore. */
+@media (hover: none) {
+  .scorciatoia {
+    display: none;
+  }
+}
+
+/* ---- accesso ---- */
+
+.accesso {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 2rem clamp(1rem, 4vw, 2rem);
+}
+
+.accessoColonna {
+  max-width: 34rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.accessoTitolo {
+  font-size: clamp(2.25rem, 8vw, 3.5rem);
+  line-height: 1.02;
+}
+
+.accessoTitolo em {
+  font-style: italic;
+  color: var(--rubrica);
+}
+
+.accessoTesto {
+  color: var(--inchiostro-tenue);
+  font-size: 1.0625rem;
+  max-width: 44ch;
+}
+
+.entra {
+  align-self: flex-start;
+  padding: 0 1.5rem;
+  border: 1px solid var(--inchiostro);
+  background: var(--inchiostro);
+  color: var(--carta);
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  transition: opacity 0.15s;
+}
+
+.entra:hover {
+  opacity: 0.85;
+}
+
+.statoServizio {
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  color: var(--inchiostro-debole);
+  border-top: 1px solid var(--filo-tenue);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.capacita {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.spia {
+  color: var(--quiete);
+}
+
+.spiaSpenta {
+  color: var(--inchiostro-debole);
+}

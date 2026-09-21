@@ -1,0 +1,181 @@
+/* Sistema visivo della piattaforma.
+ *
+ * La direzione viene dal soggetto: qui non si chatta con un assistente, si
+ * legge una voce ricostruita da documenti. Il vocabolario è quello di
+ * un'edizione critica — la colonna a margine dove un curatore annota da dove
+ * viene ciò che stai leggendo. Nella fase 1 quel margine ospiterà le citazioni
+ * numerate del recupero; per ora porta il segno di paragrafo e l'ora.
+ *
+ * Palette: inchiostro ferrogallico su carta fredda, e il rosso della
+ * rubricatura riservato ai soli segni tipografici. Mai come sfondo di un
+ * bottone: la rubrica marca dove comincia una voce, non attira l'occhio su
+ * un'azione.
+ */
+
+:root {
+  /* Carta e inchiostro */
+  --carta: #eceef1;
+  --carta-alta: #f6f7f9;
+  --inchiostro: #16212e;
+  --inchiostro-tenue: #4a5866;
+  /* 4,7:1 sulla carta chiara. Il valore che veniva naturale — un grigio
+   * più tenue — si fermava a 3,1: sotto la soglia leggibile, e proprio sul
+   * testo più piccolo della pagina, quello dell'apparato. */
+  --inchiostro-debole: #5f6b76;
+
+  /* Rubrica: il segno rosso dei manoscritti. Un solo uso, tipografico. */
+  --rubrica: #a02c16;
+  --rubrica-tenue: #c4624d;
+
+  /* Superfici */
+  --superficie: #ffffff;
+  --superficie-alta: #f6f7f9;
+  --filo: #d3d8de;
+  --filo-tenue: #e2e6ea;
+
+  /* Stati */
+  --allarme: #8f2617;
+  --quiete: #3d6152;
+
+  /* Misure */
+  --misura-lettura: 64ch;
+  --margine-apparato: 6.5rem;
+  --raggio: 2px;
+
+  /* Tipografia */
+  --display: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --lettura: "Literata", Charter, Georgia, serif;
+  --apparato: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --interfaccia: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+
+  color-scheme: light;
+}
+
+:root:not([data-theme="light"]) {
+  /* Il tema scuro non è l'inverso meccanico: la carta diventa inchiostro
+   * diluito e la rubrica si schiarisce, perché un rosso profondo su fondo
+   * scuro scende sotto il contrasto leggibile. */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --carta: #121820;
+    --carta-alta: #1a222c;
+    --inchiostro: #e4e8ec;
+    --inchiostro-tenue: #9aa6b2;
+    --inchiostro-debole: #7f8b97;
+
+    --rubrica: #e2705a;
+    --rubrica-tenue: #b9553f;
+
+    --superficie: #161e27;
+    --superficie-alta: #1e2731;
+    --filo: #2c3742;
+    --filo-tenue: #222b35;
+
+    --allarme: #e08272;
+    --quiete: #7fae9a;
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --carta: #121820;
+  --carta-alta: #1a222c;
+  --inchiostro: #e4e8ec;
+  --inchiostro-tenue: #9aa6b2;
+  --inchiostro-debole: #7f8b97;
+
+  --rubrica: #e2705a;
+  --rubrica-tenue: #b9553f;
+
+  --superficie: #161e27;
+  --superficie-alta: #1e2731;
+  --filo: #2c3742;
+  --filo-tenue: #222b35;
+
+  --allarme: #e08272;
+  --quiete: #7fae9a;
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* Il testo segue la dimensione scelta nel sistema: un `font-size` fisso in
+   * px su html annulla la scelta di chi ha ingrandito i caratteri. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--carta);
+  color: var(--inchiostro);
+  font-family: var(--lettura);
+  font-size: 1rem;
+  line-height: 1.6;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--display);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin: 0;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* Il bersaglio minimo è 48px: sotto, su un telefono si manca il bottone e si
+ * colpisce quello accanto. Vale per ogni controllo, non solo per i principali. */
+button {
+  min-height: 48px;
+  min-width: 48px;
+  cursor: pointer;
+  border-radius: var(--raggio);
+}
+
+/* Focus sempre visibile, e con un colore che regge su entrambe le carte.
+ * `:focus-visible` e non `:focus`: l'anello non deve comparire a ogni clic del
+ * mouse, ma deve esserci sempre per chi naviga da tastiera. */
+:focus-visible {
+  outline: 2px solid var(--rubrica);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--rubrica);
+  color: var(--carta-alta);
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 0.2em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
