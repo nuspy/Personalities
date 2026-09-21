@@ -1,18 +1,57 @@
-# Default Pipeline Configuration
+# Configurazione della pipeline.
+#
+# Ogni chiave qui presente e' effettivamente letta dal codice. I valori
+# mancanti vengono completati dai default in `config_loader.py`, quindi un
+# file parziale non fa piu' fallire l'avvio.
 
 persona:
   author_name: ""
-  era: ""
-  value_dict: "roman_values"
-  system_prompt_override: null
+  era: ""                      # es. "Repubblica romana, I secolo a.C."
+  value_dict: "auto"           # "auto" sceglie in base all'epoca
+  system_prompt_override: null # se valorizzato, sostituisce il prompt generato
+  knowledge:
+    era_start: ""
+    era_end: ""
+    known_topics: []
+    anachronistic_concepts: []
 
+# Stadio 0 — ricerca online (nessuna chiave API necessaria)
+research:
+  enabled: true
+  max_documents: 25
+  max_chars_per_document: 400000
+  sources:
+    - wikipedia
+    - wikisource
+    - gutenberg
+  # Soglia di pertinenza: sotto questo valore il documento viene scartato.
+  # Alzarla esclude piu' omonimi, abbassarla accetta piu' materiale di contorno.
+  relevance_threshold: 0.40
+  # Wikimedia richiede un User-Agent identificativo.
+  user_agent: "HistoricalPersonaPipeline/0.2 (local research tool)"
+
+# Stadio 1 — ingestione
+ingestion:
+  target_chunk_chars: 4000   # dimensione dei blocchi di testo
+  min_chunk_chars: 200       # sotto questa soglia i blocchi vengono accorpati
+  ocr_fallback: true         # OCR sui PDF scansionati (richiede Tesseract)
+  ocr_max_pages: 50
+
+# Stadio 2 — analisi
 analysis:
   min_text_length: 100
   extract_formulas: true
   detect_special_patterns: true
+  # Tetto di memoria per l'analisi NLP: i testi arrivano a spaCy a lotti.
+  max_chars_per_nlp_batch: 400000
+  # Limite di parole analizzate: oltre, le statistiche non cambiano piu'.
+  max_words_analyzed: 2000000
+  min_opener_count: 3
 
+# Stadio 3 — dataset
 dataset:
   num_conversations: 1000
+  # Queste proporzioni sono rispettate dal generatore di domande.
   conversation_types:
     historical_facts: 0.25
     philosophy_values: 0.20
@@ -23,14 +62,37 @@ dataset:
   include_negative_examples: true
   negative_example_ratio: 0.2
   val_split: 0.1
-  
-  # LLM Provider Configuration
-  llm_provider: "lm_studio"  # Options: "lm_studio", "nebius", "anthropic", "openai", "glm4"
-  llm_base_url: "http://localhost:1234/v1" # Default for LM Studio
-  llm_api_key: "lm-studio"
-  llm_model_name: "local-model" # or specific model name like "meta-llama/Meta-Llama-3.1-70B-Instruct"
+  max_workers: 4        # richieste LLM in parallelo
+  max_retries: 3
+  llm_timeout: 300      # un modello locale puo' essere lento
+  llm_temperature: 0.8
 
+  llm_provider: "lm_studio"   # lm_studio | openai_compatible | ollama | nebius | anthropic
+  llm_base_url: "http://localhost:1234/v1"
+  llm_api_key: "lm-studio"
+  llm_model_name: "local-model"
+
+# Stadio 4 — addestramento
 training:
+  # Modalita':
+  #   lora_new       adapter nuovo sul modello base
+  #   lora_continue  riprende un adapter esistente e prosegue
+  #   lora_stack     fonde gli adapter indicati nel base e addestra sopra
+  #   full_finetune  addestra tutti i pesi (molta piu' VRAM)
+  mode: "lora_new"
+
+  # Adapter di partenza per lora_continue / lora_stack.
+  # Forma breve:   - ./progetti/cesare/output/lora_adapters
+  # Forma estesa:  - {path: ..., weight: 0.7, name: stile_latino}
+  start_from_adapters: []
+
+  # Come fondere piu' adapter: linear | cat | ties | dare_ties | svd
+  # 'svd' e' l'unica che gestisce adapter di rango diverso.
+  merge_strategy: "linear"
+
+  # Nome della cartella prodotta sotto <progetto>/output/
+  output_name: "lora_adapters"
+
   base_model: "unsloth/Meta-Llama-3.1-8B-Instruct"
   lora:
     r: 64
@@ -50,12 +112,29 @@ training:
   weight_decay: 0.01
   warmup_ratio: 0.03
   num_epochs: 3
+  # -1 = addestra per num_epochs. Un valore positivo lo sovrascrive: usarlo
+  # solo per prove rapide.
+  max_steps: -1
   per_device_batch_size: 4
   gradient_accumulation_steps: 4
   bf16: true
   gradient_checkpointing: true
   save_steps: 100
   save_total_limit: 3
+  chat_template: "auto"
+
+# Conversione ed esportazione
+conversion:
+  # Percorso di llama.cpp per l'esportazione GGUF. Se vuoto si cerca in
+  # LLAMA_CPP_PATH, accanto al progetto e nella home.
+  llama_cpp_path: ""
+  default_format: "merged_16bit"   # merged_16bit | merged_4bit | adapter_only | gguf | ollama
+  default_quantization: "q4_k_m"
+  # Conserva il modello fp16 intermedio della conversione GGUF: occupa
+  # decine di GB, serve solo per produrre piu' quantizzazioni dallo stesso file.
+  keep_intermediate: false
+  temperature: 0.8                 # finisce nel Modelfile di Ollama
+  command_timeout: 7200
 
 evaluation:
   style_consistency_weight: 0.30

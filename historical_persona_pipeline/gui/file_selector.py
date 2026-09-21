@@ -9,22 +9,16 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 
+from ..pipeline.stage1_ingestion.decoders import extension_labels
+
 class FileSelector(QWidget):
     """Widget for selecting and managing input files with drag-and-drop."""
     
     files_changed = pyqtSignal(list)
     
-    SUPPORTED_EXTENSIONS = {
-        '.txt': 'Text File',
-        '.pdf': 'PDF Document',
-        '.doc': 'Word Document (Legacy)',
-        '.docx': 'Word Document',
-        '.epub': 'EPUB Book',
-        '.html': 'HTML Document',
-        '.htm': 'HTML Document',
-        '.xml': 'XML/TEI Document',
-        '.tei': 'TEI Document',
-    }
+    # Unica fonte di verita': il registro dei decoder. Mantenere qui una
+    # seconda lista significava offrire formati che la pipeline non leggeva.
+    SUPPORTED_EXTENSIONS = extension_labels()
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -74,7 +68,7 @@ class FileSelector(QWidget):
         group_layout.addLayout(button_layout)
         
         # Stats
-        self.stats_label = QLabel("0 files selected")
+        self.stats_label = QLabel("0 file selezionati")
         group_layout.addWidget(self.stats_label)
         
         layout.addWidget(group)
@@ -164,9 +158,20 @@ class FileSelector(QWidget):
         count = self.file_list.count()
         try:
             total_size = sum(p.stat().st_size for p in self._get_all_paths())
-            self.stats_label.setText(f"{count} files selected ({total_size / 1024 / 1024:.1f} MB total)")
-        except:
-            self.stats_label.setText(f"{count} files selected")
+            self.stats_label.setText(
+                f"{count} file selezionati ({total_size / 1024 / 1024:.1f} MB)"
+            )
+        except OSError:
+            self.stats_label.setText(f"{count} file selezionati")
     
+    def add_files(self, files: List[Path]) -> None:
+        """Aggiunge file all'elenco.
+
+        Metodo pubblico usato anche dalla ricerca online: i documenti
+        scaricati entrano qui e da qui seguono lo stesso percorso di quelli
+        scelti a mano, senza una corsia privilegiata.
+        """
+        self._add_files_to_list(files)
+
     def get_selected_files(self) -> List[Path]:
         return self._get_all_paths()
