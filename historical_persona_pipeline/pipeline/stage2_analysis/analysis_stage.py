@@ -11,6 +11,7 @@ l'intero profilo.
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -40,6 +41,10 @@ from .nlp_manager import NLPManager
 from .persona_synthesizer import PersonaSynthesizer
 
 logger = logging.getLogger(__name__)
+
+# Sotto questa quota di parole provenienti da testi *del* personaggio, il
+# profilo descrive soprattutto chi ha scritto le fonti.
+MIN_PRIMARY_SOURCE_SHARE = 0.3
 
 
 class AnalysisStage(PipelineStage):
@@ -74,6 +79,8 @@ class AnalysisStage(PipelineStage):
         self.logger.info(
             f"Lingua primaria: {primary_lang.value} su {len(segments)} segmenti"
         )
+
+        self._warn_if_no_primary_sources(ingestion_result)
 
         self.progress_update.emit(10, "Analisi della sintassi...")
         syntax = self._safe(
@@ -174,6 +181,50 @@ class AnalysisStage(PipelineStage):
         if not words_by_lang:
             return SupportedLanguage.UNKNOWN
         return max(words_by_lang, key=words_by_lang.get)
+
+    def _warn_if_no_primary_sources(self, ingestion_result: IngestionResult) -> None:
+        """Avverte quando il corpus parla del personaggio invece di essere suo.
+
+        E' la distinzione che decide se il profilo ha senso. Una voce
+        enciclopedica *su* Seneca misura lo stile di chi l'ha scritta: frasi
+        da manuale, il nome del soggetto come formula piu' frequente, nessuna
+        traccia della voce di Seneca. Il profilo che ne esce e' formalmente
+        valido e sostanzialmente falso, e senza questo avviso nulla lo
+        distingue da uno costruito sui testi veri.
+        """
+        manifest_path = self.project_dir / "sources" / "online" / "manifest.json"
+        if not manifest_path.exists():
+            # Corpus caricato a mano: non sappiamo cosa contiene, e
+            # presumerlo sarebbe peggio che tacere.
+            return
+
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            self.logger.debug(f"Manifest delle fonti illeggibile: {exc}")
+            return
+
+        documents = manifest.get("documents", [])
+        if not documents:
+            return
+
+        primary_words = sum(
+            d.get("word_count", 0) for d in documents if d.get("is_primary_source")
+        )
+        total_words = sum(d.get("word_count", 0) for d in documents) or 1
+        share = primary_words / total_words
+
+        if share >= MIN_PRIMARY_SOURCE_SHARE:
+            return
+
+        self.error_occurred.emit(
+            f"Avviso: solo il {share:.0%} del corpus e' costituito da testi "
+            f"DEL personaggio; il resto parla DI lui. Il profilo misurera' in "
+            f"buona parte lo stile di chi ha scritto quelle pagine, non quello "
+            f"di {self.author_name}. Per un risultato utile servono le sue "
+            f"opere: caricarle con --files, o verificare che la ricerca abbia "
+            f"trovato fonti su Wikisource o Gutenberg."
+        )
 
     def _pick_value_dict(self) -> str:
         """Sceglie il dizionario di valori piu' pertinente all'epoca indicata."""

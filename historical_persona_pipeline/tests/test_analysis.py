@@ -319,3 +319,125 @@ class TestSignificanceThreshold:
         assert "Fra le tue aperture ricorrono" not in prompt
         # Il resto del profilo deve restare.
         assert "## Come parli" in prompt
+
+
+class TestSourceQuality:
+    """Difetti emersi alla prima esecuzione su un personaggio nuovo.
+
+    Cercando «Lucio Anneo Seneca» la ricerca ha trovato due voci Wikipedia
+    *su* di lui e nessun suo testo. Il profilo che ne e' uscito misurava lo
+    stile di chi ha scritto quelle pagine: lessico fatto di preposizioni
+    articolate, formule costituite dal nome del soggetto e dal nome
+    dell'editore. Formalmente valido, sostanzialmente falso.
+    """
+
+    def test_preposizioni_articolate_non_sono_lessico(self):
+        """spaCy scompone «del» nel lemma «di il», che nessuna lista di
+        stopword contiene: le preposizioni piu' frequenti della lingua
+        finivano in cima ai termini caratteristici."""
+        from historical_persona_pipeline.pipeline.stage2_analysis.analyzers.vocabulary_analyzer import (
+            VocabularyAnalyzer,
+        )
+
+        stopwords = {"di", "il", "a", "in", "da", "su", "e", "che"}
+        assert not VocabularyAnalyzer._is_content_lemma("di il", stopwords)
+        assert not VocabularyAnalyzer._is_content_lemma("a il", stopwords)
+        assert VocabularyAnalyzer._is_content_lemma("seneca", stopwords)
+        assert VocabularyAnalyzer._is_content_lemma("potere", stopwords)
+
+    def test_il_nome_del_personaggio_non_e_una_sua_formula(self):
+        """In un testo che parla di lui e' la sequenza piu' ripetuta: le
+        «formule d'autore» risultavano «lucio anneo seneca»."""
+        from collections import Counter
+
+        from historical_persona_pipeline.pipeline.stage2_analysis.analyzers.vocabulary_analyzer import (
+            VocabularyAnalyzer,
+        )
+
+        trigrams = Counter({
+            ("lucio", "anneo", "seneca"): 50,
+            ("natura", "governare", "mondo"): 20,
+        })
+        formule = VocabularyAnalyzer._rank_collocations(
+            trigrams=trigrams, bigrams=Counter(), total_segments=10,
+            author_tokens={"lucio", "anneo", "seneca"}, stopwords=set(),
+        )
+        assert not any("seneca" in f for f in formule)
+        assert any("natura" in f for f in formule)
+
+    def test_sequenze_artefatte_escluse(self):
+        """«essere essere» viene dalla lemmatizzazione, «di il suo» e'
+        grammatica della lingua, non scelta di stile."""
+        from collections import Counter
+
+        from historical_persona_pipeline.pipeline.stage2_analysis.analyzers.vocabulary_analyzer import (
+            VocabularyAnalyzer,
+        )
+
+        trigrams = Counter({
+            ("essere", "essere", "stato"): 40,
+            ("di", "il", "suo"): 40,
+            ("virtu", "governare", "animo"): 20,
+        })
+        formule = VocabularyAnalyzer._rank_collocations(
+            trigrams=trigrams, bigrams=Counter(), total_segments=10,
+            author_tokens=set(), stopwords={"di", "il", "suo", "essere"},
+        )
+        assert formule == ["virtu governare animo"]
+
+    def test_corpus_di_sole_fonti_secondarie_viene_segnalato(self, tmp_path):
+        """Il profilo resta valido nella forma: senza avviso nulla lo
+        distingue da uno costruito sui testi veri."""
+        import json
+        from datetime import datetime
+
+        from historical_persona_pipeline.pipeline.data_models import IngestionResult
+
+        online = tmp_path / "sources" / "online"
+        online.mkdir(parents=True)
+        (online / "manifest.json").write_text(json.dumps({
+            "author": "Lucio Anneo Seneca",
+            "documents": [
+                {"title": "Lucio Anneo Seneca", "word_count": 7281, "is_primary_source": False},
+                {"title": "Seneca il Vecchio", "word_count": 752, "is_primary_source": False},
+            ],
+        }), encoding="utf-8")
+
+        config = load_config()
+        config["persona"]["author_name"] = "Lucio Anneo Seneca"
+        stage = AnalysisStage(config, tmp_path)
+
+        avvisi = []
+        stage.error_occurred.connect(avvisi.append)
+        stage._warn_if_no_primary_sources(IngestionResult(
+            project_id="t", timestamp=datetime.now(), total_files_processed=2,
+            total_segments=1, segments=[segment("testo")],
+            language_distribution={},
+        ))
+
+        assert avvisi, "un corpus senza testi dell'autore deve essere segnalato"
+        assert "parla DI lui" in avvisi[0]
+
+    def test_corpus_con_fonti_primarie_non_viene_segnalato(self, tmp_path):
+        import json
+        from datetime import datetime
+
+        from historical_persona_pipeline.pipeline.data_models import IngestionResult
+
+        online = tmp_path / "sources" / "online"
+        online.mkdir(parents=True)
+        (online / "manifest.json").write_text(json.dumps({
+            "documents": [
+                {"title": "De brevitate vitae", "word_count": 9000, "is_primary_source": True},
+                {"title": "Seneca", "word_count": 1000, "is_primary_source": False},
+            ],
+        }), encoding="utf-8")
+
+        stage = AnalysisStage(load_config(), tmp_path)
+        avvisi = []
+        stage.error_occurred.connect(avvisi.append)
+        stage._warn_if_no_primary_sources(IngestionResult(
+            project_id="t", timestamp=datetime.now(), total_files_processed=2,
+            total_segments=1, segments=[segment("testo")], language_distribution={},
+        ))
+        assert not avvisi

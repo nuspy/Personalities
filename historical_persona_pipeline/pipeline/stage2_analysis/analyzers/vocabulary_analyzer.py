@@ -48,6 +48,13 @@ class VocabularyAnalyzer:
         analysis = config.get("analysis", {})
         self.max_chars_per_batch = analysis.get("max_chars_per_nlp_batch", 400_000)
         self.max_words = analysis.get("max_words_analyzed", 2_000_000)
+        # Il nome del personaggio serve a escluderlo dalle formule: in un
+        # testo che parla di lui e' la sequenza piu' ripetuta in assoluto.
+        self.author_tokens = {
+            part.lower()
+            for part in str(config.get("persona", {}).get("author_name", "")).split()
+            if len(part) > 2
+        }
 
     def analyze(self, segments: List[TextSegment]) -> VocabularyProfile:
         by_language: Dict[SupportedLanguage, List[TextSegment]] = defaultdict(list)
@@ -64,12 +71,15 @@ class VocabularyAnalyzer:
         bigram_freq: Counter[Tuple[str, ...]] = Counter()
         trigram_freq: Counter[Tuple[str, ...]] = Counter()
 
+        all_stopwords: set[str] = set()
+
         for language, lang_segments in by_language.items():
             if language == SupportedLanguage.UNKNOWN:
                 continue
 
             parser = self.nlp_manager.get_parser(language)
             stopwords = get_stopwords(language, parser)
+            all_stopwords |= stopwords
 
             for segment, lemmas in self._iter_segment_lemmas(parser, lang_segments):
                 total_segments += 1
@@ -77,9 +87,7 @@ class VocabularyAnalyzer:
 
                 content_lemmas = [
                     lemma for lemma in lemmas
-                    if len(lemma) >= MIN_LEMMA_LENGTH
-                    and lemma not in stopwords
-                    and not lemma.isdigit()
+                    if self._is_content_lemma(lemma, stopwords)
                 ]
 
                 global_freq.update(content_lemmas)
@@ -105,7 +113,10 @@ class VocabularyAnalyzer:
             global_freq, segment_presence, total_tokens, max(total_segments, 1)
         )
         collocations = (
-            self._rank_collocations(bigram_freq, trigram_freq, total_segments)
+            self._rank_collocations(
+                bigram_freq, trigram_freq, total_segments,
+                self.author_tokens, all_stopwords,
+            )
             if total_tokens >= MIN_TOKENS_FOR_FORMULAS
             else []
         )
@@ -168,6 +179,28 @@ class VocabularyAnalyzer:
         for seg, lemmas in zip(batch, flush(batch)):
             yield seg, lemmas
 
+    @staticmethod
+    def _is_content_lemma(lemma: str, stopwords: set) -> bool:
+        """Vero se il lemma porta contenuto.
+
+        spaCy scompone le preposizioni articolate: «del» diventa il lemma
+        «di il». Il risultato non compare in nessuna lista di stopword, cosi'
+        le preposizioni piu' frequenti della lingua finivano in cima ai
+        termini caratteristici — su un corpus italiano il lessico distintivo
+        risultava «di il, a il, in il, da il».
+        """
+        if len(lemma) < MIN_LEMMA_LENGTH or lemma.isdigit():
+            return False
+        if lemma in stopwords:
+            return False
+        # Lemma composto: e' contenuto solo se lo e' ogni sua parte.
+        if " " in lemma:
+            return all(
+                part not in stopwords and len(part) >= MIN_LEMMA_LENGTH
+                for part in lemma.split()
+            )
+        return True
+
     # ------------------------------------------------------------ punteggi
 
     @staticmethod
@@ -205,22 +238,52 @@ class VocabularyAnalyzer:
         bigrams: Counter[Tuple[str, ...]],
         trigrams: Counter[Tuple[str, ...]],
         total_segments: int,
+        author_tokens: set | None = None,
+        stopwords: set | None = None,
     ) -> List[str]:
         """Sequenze ricorrenti: le formule che l'autore ripete.
+
+        Le sequenze che contengono il nome del personaggio sono escluse: in
+        un testo che parla di lui — una biografia, una voce enciclopedica —
+        il suo nome e' la sequenza piu' ripetuta, e le "formule d'autore"
+        risultavano «lucio anneo seneca», «seneca il vecchio».
 
         La soglia sale col numero di segmenti: su un corpus grande due
         occorrenze sono casualita', su uno piccolo sono un tratto.
         """
         min_count = max(3, total_segments // 50)
 
+        author_tokens = author_tokens or set()
+        stopwords = stopwords or set()
+
+        def names_the_author(ngram) -> bool:
+            return any(word.lower() in author_tokens for word in ngram)
+
+        def is_junk(ngram) -> bool:
+            """Sequenze che non sono formule d'autore.
+
+            Tre artefatti ricorrenti: la ripetizione dello stesso lemma
+            («essere essere»), prodotta dalla lemmatizzazione di verbi
+            composti; le sequenze fatte di sole parole funzionali («di il
+            suo»), che sono grammatica della lingua e non scelta di stile; e
+            il boilerplate della fonte («istituto di il enciclopedia
+            italiana»), che appartiene a chi ha pubblicato il testo.
+            """
+            if any(a == b for a, b in zip(ngram, ngram[1:])):
+                return True
+            content = [w for w in ngram if w.lower() not in stopwords and len(w) > 2]
+            return len(content) < 2
+
         formulas: List[Tuple[int, str]] = []
         # I trigrammi valgono piu' dei bigrammi a parita' di occorrenze:
         # sono formule piu' specifiche e meno probabili per caso.
         for ngram, count in trigrams.items():
-            if count >= min_count and all(len(w) > 1 for w in ngram):
+            if (count >= min_count and all(len(w) > 1 for w in ngram)
+                    and not names_the_author(ngram) and not is_junk(ngram)):
                 formulas.append((count * 2, " ".join(ngram)))
         for ngram, count in bigrams.items():
-            if count >= min_count * 2 and all(len(w) > 2 for w in ngram):
+            if (count >= min_count * 2 and all(len(w) > 2 for w in ngram)
+                    and not names_the_author(ngram) and not is_junk(ngram)):
                 formulas.append((count, " ".join(ngram)))
 
         formulas.sort(key=lambda item: -item[0])
