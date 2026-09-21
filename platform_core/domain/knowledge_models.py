@@ -253,6 +253,13 @@ class Personality(Base, TimestampMixin, OwnedMixin):
     description: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
 
+    #: La categoria commerciale: decide quale piano dà accesso a questa voce.
+    #: Nullo significa «accessibile a tutti», che è lo stato in cui nasce una
+    #: personalità prima che qualcuno decida come collocarla.
+    commercial_category_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("commercial_categories.id", ondelete="SET NULL"),
+    )
+
     current_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid,
         # Nessun vincolo di chiave esterna: le due tabelle si puntano a
@@ -268,6 +275,12 @@ class Personality(Base, TimestampMixin, OwnedMixin):
         cascade="all, delete-orphan",
         foreign_keys="PersonalityVersion.personality_id",
     )
+    types: Mapped[List["PersonalityType"]] = relationship(
+        secondary="personality_type_map", lazy="selectin",
+    )
+    commercial_category: Mapped[Optional["CommercialCategory"]] = relationship(
+        lazy="selectin",
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -277,6 +290,61 @@ class Personality(Base, TimestampMixin, OwnedMixin):
         # «Le personalità di questo utente, quelle pubblicate»: è l'unica query
         # che la console e il catalogo fanno davvero.
         Index("ix_personalities_owner_status", "owner_id", "status"),
+    )
+
+
+class PersonalityType(Base, TimestampMixin):
+    """Come si classifica una voce: filosofo, imprenditore, scrittore.
+
+    Tabella e non enumerazione perché è materia amministrabile: chi cura il
+    catalogo aggiunge un tipo senza che serva un rilascio. Un `Enum` nel
+    codice costringerebbe a una migrazione per ogni categoria nuova, e quella
+    frizione si paga in tipi forzati dentro caselle che non li contengono.
+    """
+
+    __tablename__ = "personality_types"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    slug: Mapped[str] = mapped_column(String(60), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+
+
+class PersonalityTypeMap(Base):
+    """Molti-a-molti: una voce può essere più cose insieme.
+
+    Seneca è filosofo e drammaturgo, e costringerlo a scegliere perderebbe
+    metà di ciò che lo rende cercabile.
+    """
+
+    __tablename__ = "personality_type_map"
+
+    personality_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("personalities.id", ondelete="CASCADE"), primary_key=True,
+    )
+    type_id: Mapped[int] = mapped_column(
+        ForeignKey("personality_types.id", ondelete="CASCADE"), primary_key=True,
+    )
+
+
+class CommercialCategory(Base, TimestampMixin):
+    """Il livello di abbonamento che dà accesso a una voce.
+
+    `rank` è l'ordinamento e insieme la regola: un piano dà accesso a tutte le
+    categorie di rango non superiore al proprio. Con un elenco di nomi
+    servirebbe una tabella di corrispondenze, e quella tabella sarebbe il posto
+    dove un permesso si perde.
+    """
+
+    __tablename__ = "commercial_categories"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    slug: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        UniqueConstraint("rank", name="uq_commercial_categories_rank"),
     )
 
 

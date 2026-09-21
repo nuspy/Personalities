@@ -22,7 +22,7 @@ from ..observability.tracing import (
     instrument_engine, setup_tracing, span_corrente_con_correlazione,
 )
 from ..settings import get_settings
-from .routers import capabilities, chat
+from .routers import admin, capabilities, chat
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +125,7 @@ def create_app() -> FastAPI:
 
     app.include_router(capabilities.router)
     app.include_router(chat.router)
+    app.include_router(admin.router)
 
     # Qui e non nel lifespan: la strumentazione di FastAPI inserisce un
     # middleware ASGI, e Starlette costruisce la catena dei middleware alla
