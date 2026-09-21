@@ -1,0 +1,87 @@
+{
+  "_comment": "Marcatori di struttura argomentativa per lingua. Servono a misurare COME il personaggio ragiona: se procede per causa, per contrasto, per esempio, per concessione o per autorita'. La versione precedente aveva tre categorie scritte nel codice, solo in inglese e italiano: su un corpus latino o greco il profilo retorico risultava vuoto. I marcatori sono minuscoli e vengono cercati sui confini di parola.",
+
+  "causal": {
+    "it": ["perché", "poiché", "giacché", "quindi", "dunque", "pertanto", "di conseguenza", "infatti", "per questo motivo", "ne consegue"],
+    "en": ["because", "since", "therefore", "thus", "hence", "consequently", "as a result", "for this reason", "it follows"],
+    "la": ["quia", "quoniam", "quod", "nam", "enim", "igitur", "ergo", "itaque", "quare", "quapropter", "quamobrem", "propterea"],
+    "grc": ["γαρ", "ουν", "διο", "διοτι", "επει", "επειδη", "ωστε", "τοιγαρουν"],
+    "fr": ["parce que", "puisque", "donc", "ainsi", "par conséquent", "en effet", "c'est pourquoi"],
+    "de": ["weil", "denn", "daher", "deshalb", "folglich", "somit", "deswegen"],
+    "es": ["porque", "puesto que", "por lo tanto", "así que", "en efecto", "por consiguiente"],
+    "ru": ["потому что", "так как", "поэтому", "следовательно", "итак", "ибо"],
+    "hu": ["mert", "mivel", "ezért", "tehát", "következésképpen", "ugyanis"]
+  },
+
+  "contrast": {
+    "it": ["ma", "però", "tuttavia", "eppure", "invece", "al contrario", "d'altra parte", "nondimeno"],
+    "en": ["but", "however", "yet", "nevertheless", "on the contrary", "on the other hand", "whereas", "although"],
+    "la": ["sed", "autem", "tamen", "verum", "at", "contra", "ceterum", "nihilominus", "attamen"],
+    "grc": ["αλλα", "δε", "μεντοι", "ομως", "καιτοι", "τουναντιον"],
+    "fr": ["mais", "cependant", "pourtant", "toutefois", "en revanche", "au contraire", "néanmoins"],
+    "de": ["aber", "jedoch", "dennoch", "hingegen", "allerdings", "trotzdem"],
+    "es": ["pero", "sin embargo", "no obstante", "en cambio", "al contrario"],
+    "ru": ["но", "однако", "тем не менее", "напротив", "зато"],
+    "hu": ["de", "azonban", "mégis", "ellenben", "viszont"]
+  },
+
+  "concession": {
+    "it": ["sebbene", "benché", "nonostante", "per quanto", "anche se", "pur essendo"],
+    "en": ["although", "though", "even if", "despite", "granted that", "admittedly"],
+    "la": ["quamquam", "quamvis", "etsi", "tametsi", "licet", "quantumvis"],
+    "grc": ["καιπερ", "ει και", "καν", "ομως"],
+    "fr": ["bien que", "quoique", "même si", "malgré"],
+    "de": ["obwohl", "obgleich", "wenngleich", "trotz"],
+    "es": ["aunque", "si bien", "a pesar de"],
+    "ru": ["хотя", "несмотря на", "пусть"],
+    "hu": ["bár", "jóllehet", "habár", "ellenére"]
+  },
+
+  "authority": {
+    "it": ["come dice", "secondo", "come afferma", "com'è noto", "si narra", "gli antichi", "tramandano"],
+    "en": ["according to", "as stated", "as the saying goes", "it is well known", "the ancients", "tradition holds"],
+    "la": ["ut ait", "ut dicit", "ut inquit", "auctore", "secundum", "ut tradunt", "ut scriptum est", "maiores nostri"],
+    "grc": ["ως φησι", "κατα", "ως λεγεται", "οι παλαιοι", "ως ειρηται"],
+    "fr": ["selon", "comme dit", "d'après", "il est bien connu"],
+    "de": ["laut", "wie gesagt", "nach", "bekanntlich"],
+    "es": ["según", "como dice", "es bien sabido"],
+    "ru": ["согласно", "как говорит", "известно, что"],
+    "hu": ["szerint", "amint mondja", "köztudott"]
+  },
+
+  "example": {
+    "it": ["per esempio", "ad esempio", "come nel caso", "si consideri", "basti pensare"],
+    "en": ["for example", "for instance", "such as", "consider the case", "take the case of"],
+    "la": ["exempli gratia", "verbi causa", "ut si", "velut", "sicut", "quemadmodum"],
+    "grc": ["οιον", "ωσπερ", "παραδειγματος χαριν", "καθαπερ"],
+    "fr": ["par exemple", "comme", "ainsi que", "tel que"],
+    "de": ["zum beispiel", "etwa", "beispielsweise", "wie etwa"],
+    "es": ["por ejemplo", "como", "tal como"],
+    "ru": ["например", "как например", "к примеру"],
+    "hu": ["például", "úgy mint", "mint amilyen"]
+  },
+
+  "condition": {
+    "it": ["se", "qualora", "a meno che", "purché", "nel caso in cui"],
+    "en": ["if", "unless", "provided that", "in case", "should it"],
+    "la": ["si", "nisi", "sin", "dummodo", "modo", "sive"],
+    "grc": ["ει", "εαν", "ην", "ειπερ"],
+    "fr": ["si", "à moins que", "pourvu que", "au cas où"],
+    "de": ["wenn", "falls", "sofern", "es sei denn"],
+    "es": ["si", "a menos que", "con tal que"],
+    "ru": ["если", "в случае", "разве что"],
+    "hu": ["ha", "amennyiben", "kivéve ha"]
+  },
+
+  "enumeration": {
+    "it": ["in primo luogo", "in secondo luogo", "infine", "inoltre", "oltre a ciò"],
+    "en": ["first", "secondly", "finally", "moreover", "furthermore", "in addition"],
+    "la": ["primum", "deinde", "tum", "postremo", "praeterea", "insuper", "denique"],
+    "grc": ["πρωτον", "επειτα", "ειτα", "τελος", "προς τουτοις"],
+    "fr": ["premièrement", "ensuite", "enfin", "de plus", "en outre"],
+    "de": ["erstens", "zweitens", "schließlich", "außerdem", "ferner"],
+    "es": ["en primer lugar", "luego", "finalmente", "además"],
+    "ru": ["во-первых", "затем", "наконец", "кроме того"],
+    "hu": ["először", "másodszor", "végül", "továbbá"]
+  }
+}
