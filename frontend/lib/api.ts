@@ -30,12 +30,28 @@ export interface Consumo {
   model: string;
 }
 
+export interface Fonte {
+  etichetta: string;
+  documento: string;
+  sezione: string | null;
+  uri: string | null;
+  estratto: string;
+}
+
+export interface Personalita {
+  slug: string;
+  display_name: string;
+  description: string | null;
+}
+
 export type EventoChat =
-  | { tipo: "inizio"; conversationId: string; correlationId: string }
+  | { tipo: "inizio"; conversationId: string; correlationId: string; personalita: string | null }
+  | { tipo: "fonti"; fonti: Fonte[] }
   | { tipo: "token"; testo: string }
   | { tipo: "pensa" }
+  | { tipo: "degradato"; motivo: string }
   | { tipo: "errore"; messaggio: string; recuperabile: boolean }
-  | { tipo: "fine"; consumo: Consumo | null };
+  | { tipo: "fine"; consumo: Consumo | null; inventati: string[] };
 
 export class ErroreApi extends Error {
   constructor(message: string, readonly stato: number) {
@@ -60,6 +76,11 @@ async function leggi<T>(risposta: Response): Promise<T> {
     );
   }
   return risposta.json() as Promise<T>;
+}
+
+export async function elencaPersonalita(): Promise<Personalita[]> {
+  /* Senza token: il catalogo è ciò che si vede prima di entrare. */
+  return leggi(await fetch(`${API}/personalities`));
 }
 
 export async function elencaConversazioni(token: string): Promise<Conversazione[]> {
@@ -96,6 +117,7 @@ export async function* conversa(
   token: string,
   messaggio: string,
   conversationId: string | null,
+  personalita: string | null,
   segnale?: AbortSignal,
 ): AsyncGenerator<EventoChat> {
   const risposta = await fetch(`${API}/chat`, {
@@ -104,6 +126,7 @@ export async function* conversa(
     body: JSON.stringify({
       message: messaggio,
       conversation_id: conversationId,
+      personality: personalita,
     }),
     signal: segnale,
   });
@@ -165,7 +188,12 @@ function interpreta(blocco: string): EventoChat | null {
         tipo: "inizio",
         conversationId: String(corpo.conversation_id),
         correlationId: String(corpo.correlation_id),
+        personalita: (corpo.personality as string) ?? null,
       };
+    case "sources":
+      return { tipo: "fonti", fonti: (corpo.passaggi as Fonte[]) ?? [] };
+    case "degradato":
+      return { tipo: "degradato", motivo: String(corpo.motivo) };
     case "token":
       return { tipo: "token", testo: String(corpo.text) };
     case "thinking":
@@ -177,7 +205,11 @@ function interpreta(blocco: string): EventoChat | null {
         recuperabile: Boolean(corpo.recoverable),
       };
     case "done":
-      return { tipo: "fine", consumo: (corpo.usage as Consumo) ?? null };
+      return {
+        tipo: "fine",
+        consumo: (corpo.usage as Consumo) ?? null,
+        inventati: (corpo.riferimenti_inventati as string[]) ?? [],
+      };
     default:
       return null;
   }

@@ -73,8 +73,23 @@ def get_llm_provider():
     return OpenAICompatibleProvider()
 
 
+@lru_cache(maxsize=1)
+def get_embedder():
+    """Il vettorizzatore, condiviso fra le richieste.
+
+    Non tiene stato fra una chiamata e l'altra — solo il profilo di prefissi
+    del modello, che si ricava una volta sola. Condividerlo evita di rifare
+    quel lavoro, e soprattutto di ripetere l'avviso sul modello non
+    riconosciuto a ogni domanda.
+    """
+    from ..knowledge.embedding import OpenAICompatibleEmbedder
+
+    return OpenAICompatibleEmbedder()
+
+
 def reset_dependencies() -> None:
     """Dimentica le istanze memorizzate. Solo per i test."""
     get_key_value_store.cache_clear()
     get_capability_registry.cache_clear()
     get_llm_provider.cache_clear()
+    get_embedder.cache_clear()

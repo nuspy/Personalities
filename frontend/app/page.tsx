@@ -4,10 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import {
   conversa,
+  elencaPersonalita,
   ErroreApi,
   leggiCapacita,
   type CapacitaPiattaforma,
   type Consumo,
+  type Fonte,
+  type Personalita,
 } from "@/lib/api";
 import stili from "./page.module.css";
 
@@ -15,8 +18,10 @@ interface Turno {
   chi: "utente" | "voce";
   testo: string;
   ora: string;
+  fonti?: Fonte[];
   consumo?: Consumo | null;
   errore?: string;
+  inventati?: string[];
 }
 
 function adesso(): string {
@@ -151,10 +156,23 @@ function Conversazione() {
   const [inCorso, setInCorso] = useState(false);
   const [pensa, setPensa] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [personalita, setPersonalita] = useState<Personalita[]>([]);
+  const [scelta, setScelta] = useState<string | null>(null);
 
   const fondo = useRef<HTMLDivElement>(null);
   const campo = useRef<HTMLTextAreaElement>(null);
   const interruttore = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    elencaPersonalita()
+      .then((elenco) => {
+        setPersonalita(elenco);
+        /* Se ce n'è una sola, si sceglie da sé: un menu con un'opzione è una
+         * domanda a cui esiste una risposta sola. */
+        if (elenco.length === 1) setScelta(elenco[0].slug);
+      })
+      .catch(() => setPersonalita([]));
+  }, []);
 
   useEffect(() => {
     fondo.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -193,11 +211,15 @@ function Conversazione() {
         token,
         messaggio,
         conversationId,
+        scelta,
         controller.signal,
       )) {
         switch (evento.tipo) {
           case "inizio":
             setConversationId(evento.conversationId);
+            break;
+          case "fonti":
+            aggiornaUltimo((t) => ({ ...t, fonti: evento.fonti }));
             break;
           case "pensa":
             setPensa(true);
@@ -206,11 +228,18 @@ function Conversazione() {
             setPensa(false);
             aggiornaUltimo((t) => ({ ...t, testo: t.testo + evento.testo }));
             break;
+          case "degradato":
+            aggiornaUltimo((t) => ({ ...t, errore: evento.motivo }));
+            break;
           case "errore":
             aggiornaUltimo((t) => ({ ...t, errore: evento.messaggio }));
             break;
           case "fine":
-            aggiornaUltimo((t) => ({ ...t, consumo: evento.consumo }));
+            aggiornaUltimo((t) => ({
+              ...t,
+              consumo: evento.consumo,
+              inventati: evento.inventati,
+            }));
             break;
         }
       }
@@ -231,7 +260,10 @@ function Conversazione() {
       interruttore.current = null;
       campo.current?.focus();
     }
-  }, [auth, bozza, conversationId, inCorso]);
+  }, [auth, bozza, conversationId, inCorso, scelta]);
+
+  const nomeScelta =
+    personalita.find((p) => p.slug === scelta)?.display_name ?? null;
 
   return (
     <div className={stili.pagina}>
@@ -239,6 +271,27 @@ function Conversazione() {
         <div className={stili.marchio}>
           Personalities<span>.</span>
         </div>
+
+        {personalita.length > 1 && (
+          <select
+            className={stili.scelta}
+            value={scelta ?? ""}
+            /* La personalità si fissa all'apertura della conversazione:
+             * cambiarla a metà renderebbe lo scambio incoerente, e l'API la
+             * ignorerebbe comunque. */
+            disabled={inCorso || turni.length > 0}
+            onChange={(e) => setScelta(e.target.value || null)}
+            aria-label="Con chi parlare"
+          >
+            <option value="">Nessuna personalità</option>
+            {personalita.map((p) => (
+              <option key={p.slug} value={p.slug}>
+                {p.display_name}
+              </option>
+            ))}
+          </select>
+        )}
+
         <button
           className={stili.azioneTestata}
           onClick={() => {
@@ -261,7 +314,10 @@ function Conversazione() {
       <main className={stili.lettura}>
         <div className={stili.colonna}>
           {turni.length === 0 ? (
-            <Soglia nome={auth.user?.profile.given_name} />
+            <Soglia
+              nome={auth.user?.profile.given_name}
+              personalita={nomeScelta}
+            />
           ) : (
             turni.map((turno, i) => (
               <Riga
@@ -334,22 +390,33 @@ function Conversazione() {
         </div>
         <p className={stili.suggerimento}>
           <span className={stili.scorciatoia}>Invio per mandare</span>
-          <span>senza personalità · fase 0</span>
+          <span>{nomeScelta ?? "senza personalità"}</span>
         </p>
       </div>
     </div>
   );
 }
 
-function Soglia({ nome }: { nome?: string }) {
+function Soglia({
+  nome,
+  personalita,
+}: {
+  nome?: string;
+  personalita: string | null;
+}) {
   return (
     <div className={stili.soglia}>
       <h1 className={stili.sogliaTitolo}>
-        {nome ? `Bentornato, ${nome}.` : "Comincia."}
+        {personalita
+          ? `Scrivi a ${personalita}.`
+          : nome
+            ? `Bentornato, ${nome}.`
+            : "Comincia."}
       </h1>
       <p className={stili.sogliaTesto}>
-        Il modello risponde ancora con la propria voce: il carattere, il
-        recupero dalle fonti e la memoria arrivano con le fasi successive.
+        {personalita
+          ? "Le risposte nascono dal suo corpus. A margine trovi i passaggi da cui vengono."
+          : "Il modello risponde con la propria voce: scegli una personalità per ancorare le risposte a un corpus."}
       </p>
       <p className={stili.nota}>
         Quello che scrivi resta salvato nella conversazione e legato al tuo
@@ -375,8 +442,9 @@ function Riga({
       className={`${stili.turno} ${èVoce ? "" : stili.turnoUtente}`}
       aria-live={inScrittura ? "polite" : undefined}
     >
-      {/* Il margine dell'apparato. Per ora porta chi parla e quando; dalla
-          fase 1 ospiterà i riferimenti numerati ai passaggi recuperati. */}
+      {/* Il margine dell'apparato: chi parla, quando, e da dove viene ciò che
+          dice. I riferimenti compaiono appena il recupero è finito, quindi
+          prima che la risposta cominci ad arrivare. */}
       <div className={stili.margine}>
         {èVoce && (
           <span className={stili.segno} aria-hidden="true">
@@ -385,6 +453,9 @@ function Riga({
         )}
         <span className={stili.chi}>{èVoce ? "voce" : "tu"}</span>
         <span className={stili.ora}>{turno.ora}</span>
+        {turno.fonti && turno.fonti.length > 0 && (
+          <Apparato fonti={turno.fonti} />
+        )}
       </div>
 
       <div>
@@ -398,7 +469,35 @@ function Riga({
           <p className={stili.pensa}>sta ragionando…</p>
         )}
         {turno.errore && <p className={stili.errore}>{turno.errore}</p>}
+        {turno.inventati && turno.inventati.length > 0 && (
+          /* Un riferimento citato che non esiste fra quelli forniti. Si
+             rileva confrontando due insiemi: nessun modello di verifica, costo
+             zero. Va detto a chi legge, perché è l'unico punto in cui una
+             risposta ben scritta può essere infondata. */
+          <p className={stili.avviso}>
+            Cita riferimenti che non esistono ({turno.inventati.join(", ")}):
+            quella parte non è ancorata al corpus.
+          </p>
+        )}
       </div>
     </article>
+  );
+}
+
+function Apparato({ fonti }: { fonti: Fonte[] }) {
+  return (
+    <ul className={stili.apparato}>
+      {fonti.map((f) => (
+        <li key={f.etichetta} className={stili.riferimento}>
+          <abbr
+            className={stili.etichetta}
+            title={`${f.documento}${f.sezione ? ` — ${f.sezione}` : ""}\n\n${f.estratto}`}
+          >
+            {f.etichetta}
+          </abbr>{" "}
+          <span className={stili.fonte}>{f.documento}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

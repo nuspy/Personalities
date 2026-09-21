@@ -390,3 +390,102 @@
 .spiaSpenta {
   color: var(--inchiostro-debole);
 }
+
+/* ---- l'apparato: i riferimenti nel margine ----
+ *
+ * È il motivo per cui il margine esiste. Su schermo largo scende sotto
+ * l'intestazione del turno, allineato a destra contro il filo del testo; su
+ * mobile diventa una riga di etichette, perché lì la colonna non c'è e un
+ * elenco di titoli rubberebbe lo spazio alla lettura.
+ */
+
+.apparato {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+@media (min-width: 52rem) {
+  .apparato {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.3rem;
+    margin-top: 0.6rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--filo-tenue);
+    width: 100%;
+  }
+}
+
+.riferimento {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  line-height: 1.35;
+}
+
+@media (min-width: 52rem) {
+  .riferimento {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+  }
+}
+
+.etichetta {
+  color: var(--rubrica);
+  font-weight: 500;
+  /* `abbr` porta con sé una sottolineatura punteggiata che qui è rumore: il
+   * colore di rubrica dice già che l'elemento è un riferimento. Il titolo
+   * resta, ed è ciò che mostra l'estratto al passaggio del mouse. */
+  text-decoration: none;
+  cursor: help;
+}
+
+.fonte {
+  color: var(--inchiostro-debole);
+}
+
+/* Su schermo stretto il titolo del documento starebbe su tre righe: resta
+ * l'etichetta, e il resto si legge toccandola. */
+@media (max-width: 52rem) {
+  .fonte {
+    display: none;
+  }
+}
+
+/* ---- avviso di citazione infondata ---- */
+
+.avviso {
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.8125rem;
+  color: var(--allarme);
+  border-left: 2px solid var(--allarme);
+  padding-left: 0.65rem;
+  margin: 0.75rem 0 0;
+}
+
+/* ---- scelta della personalità ---- */
+
+.scelta {
+  height: 48px;
+  padding: 0 0.6rem;
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  background: var(--superficie);
+  color: var(--inchiostro);
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.875rem;
+  max-width: 11rem;
+}
+
+.scelta:disabled {
+  color: var(--inchiostro-tenue);
+  /* Non `opacity`: sbiadirebbe anche il testo, e qui l'informazione — con chi
+   * si sta parlando — serve proprio mentre il controllo è bloccato. */
+  background: var(--carta-alta);
+  cursor: default;
+}

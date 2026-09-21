@@ -15,14 +15,24 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime
-from typing import List, Optional, Sequence
+from typing import TYPE_CHECKING, List, Optional, Sequence
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth.keycloak import Principal
 from .base import utcnow
+from .knowledge_models import (
+    AnswerTrace, Personality, PersonalityKnowledgeBase, PersonalityVersion,
+)
 from .models import AuditLog, Conversation, Message, User
+
+if TYPE_CHECKING:  # pragma: no cover
+    # Solo per l'annotazione: importarlo davvero chiuderebbe un anello —
+    # `auth` dipende da questo modulo per sincronizzare l'utente, e questo
+    # modulo dipenderebbe da `auth` per un tipo che serve a leggere tre
+    # attributi. Il livello dati non deve sapere come si autentica
+    # qualcuno, solo chi e'.
+    from ..auth.keycloak import Principal
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +49,7 @@ class UserRepository:
         )
         return result.scalar_one_or_none()
 
-    async def ensure(self, principal: Principal) -> User:
+    async def ensure(self, principal: "Principal") -> User:
         """L'utente corrispondente al token, creandolo alla prima comparsa.
 
         Non esiste una «registrazione» separata: chi supera la verifica del
@@ -179,6 +189,102 @@ class ConversationRepository:
             )
         )
         return int(result.scalar_one())
+
+
+class PersonalityRepository:
+    """Le personalità servibili, con la loro versione e i loro corpora.
+
+    Le letture qui non filtrano per proprietario: una personalità pubblicata è
+    un catalogo, non un dato privato. Quelle in bozza restano invisibili finché
+    non vengono pubblicate — ed è la ragione per cui `status` esiste.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def pubblicate(self) -> Sequence[Personality]:
+        result = await self._session.execute(
+            select(Personality)
+            .where(Personality.status == "published")
+            .order_by(Personality.display_name)
+        )
+        return result.scalars().all()
+
+    async def per_slug(self, slug: str) -> Optional[Personality]:
+        result = await self._session.execute(
+            select(Personality).where(
+                Personality.slug == slug, Personality.status == "published",
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def versione(self, version_id: uuid.UUID) -> Optional[PersonalityVersion]:
+        return await self._session.get(PersonalityVersion, version_id)
+
+    async def versione_corrente(
+        self, personalita: Personality
+    ) -> Optional[PersonalityVersion]:
+        if personalita.current_version_id is None:
+            return None
+        return await self.versione(personalita.current_version_id)
+
+    async def corpora(self, personalita: Personality) -> List[uuid.UUID]:
+        return await self.corpora_di(personalita.id)
+
+    async def corpora_di(self, personality_id: uuid.UUID) -> List[uuid.UUID]:
+        """Le basi che questa personalità consulta.
+
+        Solo quelle attive: disattivarne una è il modo per escluderla senza
+        perdere la configurazione, e una base spenta che continuasse a
+        rispondere renderebbe l'interruttore una decorazione.
+        """
+        result = await self._session.execute(
+            select(PersonalityKnowledgeBase.kb_id).where(
+                PersonalityKnowledgeBase.personality_id == personality_id,
+                PersonalityKnowledgeBase.enabled.is_(True),
+            )
+        )
+        return [r[0] for r in result]
+
+    async def slug_di(self, personality_id: uuid.UUID) -> Optional[str]:
+        return await self._session.scalar(
+            select(Personality.slug).where(Personality.id == personality_id)
+        )
+
+
+class TraceRepository:
+    """Come è nata una risposta."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def registra(
+        self,
+        *,
+        message_id: uuid.UUID,
+        personality_version_id: Optional[uuid.UUID] = None,
+        retrieved: Optional[dict] = None,
+        usage: Optional[dict] = None,
+        latency_ms: Optional[dict] = None,
+        grounding: Optional[dict] = None,
+    ) -> AnswerTrace:
+        traccia = AnswerTrace(
+            message_id=message_id,
+            personality_version_id=personality_version_id,
+            retrieved=retrieved,
+            usage=usage,
+            latency_ms=latency_ms,
+            grounding=grounding,
+            created_at=utcnow(),
+        )
+        self._session.add(traccia)
+        return traccia
+
+    async def per_messaggio(self, message_id: uuid.UUID) -> Optional[AnswerTrace]:
+        result = await self._session.execute(
+            select(AnswerTrace).where(AnswerTrace.message_id == message_id)
+        )
+        return result.scalar_one_or_none()
 
 
 class AuditRepository:
