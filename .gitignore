@@ -1,3 +1,14 @@
 /build
 /venv/
+/venv_corrupt_backup/
+/.venv/
 /hu_core_news_trf-3.7.0-py3-none-any.whl
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+# I progetti generati sono output, non sorgente.
+/historical_persona_pipeline/projects/
+/historical_persona_pipeline/cache/
+# Cache di compilazione generata da Unsloth all'avvio dell'addestramento.
+/unsloth_compiled_cache/

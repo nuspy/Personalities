@@ -20,12 +20,16 @@ class SupportedLanguage(str, Enum):
 
 class FileFormat(str, Enum):
     TXT = "txt"
+    MARKDOWN = "markdown"
     PDF = "pdf"
     DOC = "doc"
     DOCX = "docx"
+    RTF = "rtf"
+    ODT = "odt"
     EPUB = "epub"
     HTML = "html"
     XML_TEI = "xml_tei"
+    WEB = "web"
     UNKNOWN = "unknown"
 
 class TextSegment(BaseModel):
@@ -56,6 +60,11 @@ class SyntacticProfile(BaseModel):
     person_distribution: Dict[str, float]
     common_pos_patterns: List[Any]  # Can be list of tuples or strings depending on serialization
     special_patterns: Dict[str, int]
+    # False quando nessun modello morfologico era disponibile: i rapporti di
+    # subordinazione valgono 0 perche' non misurabili, non perche' assenti.
+    # Senza questo flag il profilo dichiarerebbe "periodo paratattico" a un
+    # autore che non e' stato analizzato affatto.
+    morphology_available: bool = True
 
 class VocabularyProfile(BaseModel):
     distinctive_terms: List[Dict[str, Any]]
@@ -76,11 +85,41 @@ class RhetoricalProfile(BaseModel):
     narrative_perspective: str
     self_reference_patterns: List[str]
 
+class VoiceProfile(BaseModel):
+    """Come il personaggio parla: ritmo, incipit, vocativi, modalita'.
+
+    Dimensione assente dal profilo originale, che descriveva la struttura
+    delle frasi ma non i tratti per cui una voce si riconosce a orecchio.
+    """
+    signature_openers: List[Dict[str, Any]] = []
+    vocatives: List[Dict[str, Any]] = []
+    question_ratio: float = 0.0
+    exclamation_ratio: float = 0.0
+    parenthetical_per_1000_words: float = 0.0
+    direct_speech_per_1000_words: float = 0.0
+    avg_word_length: float = 0.0
+    modality_distribution: Dict[str, float] = {}
+    speech_register: str = "unknown"
+
+
 class KnowledgeBounds(BaseModel):
     era_start: str
     era_end: str
     known_topics: List[str]
     anachronistic_concepts: List[str]
+
+class CorpusStats(BaseModel):
+    """Dimensione effettiva del materiale analizzato.
+
+    Serve a interpretare il profilo: gli stessi numeri hanno un peso molto
+    diverso se estratti da 2.000 o da 2.000.000 di parole.
+    """
+    total_files: int = 0
+    total_segments: int = 0
+    total_words: int = 0
+    language_distribution: Dict[str, int] = {}
+    sources: List[str] = []
+
 
 class CompleteStyleProfile(BaseModel):
     author_name: str
@@ -90,9 +129,12 @@ class CompleteStyleProfile(BaseModel):
     vocabulary: VocabularyProfile
     values: ValueProfile
     rhetoric: RhetoricalProfile
+    voice: VoiceProfile = VoiceProfile()
     knowledge: Optional[KnowledgeBounds] = None
+    corpus_stats: CorpusStats = CorpusStats()
     generated_system_prompt: str
     training_guidelines: Dict[str, List[str]] = {}
+    generated_at: Optional[datetime] = None
 
 class TrainingConversation(BaseModel):
     id: str

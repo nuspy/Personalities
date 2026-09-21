@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "historical-persona-pipeline"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pipeline end-to-end per creare e addestrare Personaggi Storici basati su LLM"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-  {name = "Gemini Agent", email = "agent@example.com"}
+  {name = "nuspy"}
 ]
 dependencies = [
     # Core GUI & Logic
@@ -23,7 +23,6 @@ dependencies = [
     # NLP & Linguistics
     "spacy>=3.7.0",
     "langdetect>=1.0.9",
-    "cltk>=1.1.0",
     "huspacy>=0.11.0",
     "spacy-transformers",
     
@@ -34,11 +33,21 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "lxml>=4.9.0",
     "olefile>=0.46",
+    "striprtf>=0.0.26",          # .rtf
+    "odfpy>=1.4.1",              # .odt
+    "charset-normalizer>=3.0",   # codifiche non UTF-8
+    # Verifica TLS con l'archivio certificati del sistema: necessario dove un
+    # proxy aziendale o un antivirus rifirma il traffico HTTPS.
+    "truststore>=0.8; python_version >= '3.10'",
     
     # AI & ML Core (Version Constraints for Unsloth Compatibility)
     "torch>=2.1.0",
-    # Unsloth requires transformers >= 4.51.3 and <= 4.57.3 (as of current release)
-    "transformers>=4.51.3,<=4.57.3", 
+    # Il tetto a 4.57.3 era ereditato da una vecchia nota su Unsloth e non
+    # corrisponde piu' alla realta': Unsloth 2026.9 lavora con transformers 4.57,
+    # e Unsloth Studio gira su transformers 5.5. Il codice si adatta alle firme
+    # a runtime, quindi il vincolo resta largo; l'ultima major e' esclusa perche'
+    # non e' stata verificata qui.
+    "transformers>=4.51.3,<6", 
     "datasets>=2.16.0",
     "peft>=0.7.0",
     "trl>=0.7.0",
@@ -62,10 +71,40 @@ dev = [
     "black",
     "ruff"
 ]
-# Unsloth installation
-training = [
-    "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+# Lingue antiche: CLTK e' pesante e non serve ai corpora moderni.
+ancient = [
+    "cltk>=1.1.0"
 ]
+# OCR per i PDF scansionati. Richiede anche l'eseguibile Tesseract nel PATH.
+ocr = [
+    "pytesseract>=0.3.10",
+    "pillow>=10.0.0"
+]
+# Addestramento e conversione. Unsloth e' opzionale: accelera, ma il codice
+# ripiega su transformers + peft, con cui il ciclo e' stato verificato su
+# RTX 5090 (Blackwell, sm_120).
+training = [
+    "transformers>=4.51.3,<6",
+    "peft>=0.14",
+    "trl>=0.12,<0.24",
+    "datasets>=2.16",
+    "accelerate>=0.34",
+]
+# Acceleratore opzionale. Richiede CUDA e versioni precise: se non si installa,
+# l'addestramento funziona comunque tramite transformers + peft.
+unsloth = [
+    "unsloth @ git+https://github.com/unslothai/unsloth.git"
+]
+# Esportazione GGUF: lo script di conversione arriva dal repo llama.cpp, qui
+# servono solo le sue dipendenze Python.
+gguf = [
+    "gguf>=0.10",
+    "sentencepiece>=0.2",
+    "protobuf>=4.0",
+]
+
+[project.scripts]
+persona = "historical_persona_pipeline.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
