@@ -30,6 +30,7 @@ from .digestion import (
     PER_LOTTO, SOGLIA_QUALITA, Digestore, EsitoDigestione, scarto_a_vista,
 )
 from .embedding import somiglianza_coseno
+from .normalization import ricongiungi_capolettera
 from .taxonomy import Categoria, Etichettatura, Provenienza
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,18 @@ class DigestioneCorpus:
 
         logger.info("Base «%s»: %d passaggi da digerire", kb.slug, totale)
 
+        # Passata 0: riparare ciò che l'estrazione ha rotto.
+        #
+        # Prima di tutto il resto, perché il capolettera spezzato falsa ogni
+        # passo successivo: il classificatore legge «D opo», l'indice
+        # lessicale registra la radice `opo` che non è una parola, e il
+        # dataset di addestramento insegnerebbe a scrivere così.
+        esito.ricongiunti = await self._ricongiungi(da_fare)
+        if avanzamento and esito.ricongiunti:
+            avanzamento(
+                0, totale, f"{esito.ricongiunti} capolettera ricongiunti",
+            )
+
         # Passata 1: a vista, senza costo.
         restanti: List[Chunk] = []
         for chunk in da_fare:
@@ -143,6 +156,36 @@ class DigestioneCorpus:
 
         logger.info("Base «%s» digerita: %s", kb.slug, esito.to_dict())
         return esito
+
+    async def _ricongiungi(self, chunks: Sequence[Chunk]) -> int:
+        """Ricompone le parole spezzate dal capolettera.
+
+        Il vocabolario si costruisce sul corpus **intero** e non sui soli
+        passaggi da digerire: è la frequenza delle parole a distinguere un
+        frammento da una congiunzione, e un campione parziale la falserebbe.
+        """
+        tutti = (await self._session.execute(
+            select(Chunk.text).where(Chunk.kb_id == chunks[0].kb_id)
+        )).scalars().all() if chunks else []
+
+        frequenze_corpus = list(tutti)
+        esito = ricongiungi_capolettera(
+            [c.text for c in chunks] + frequenze_corpus
+        )
+
+        cambiati = 0
+        for chunk, nuovo in zip(chunks, esito.testi):
+            if nuovo == chunk.text:
+                continue
+            if chunk.text_original is None:
+                chunk.text_original = chunk.text
+            chunk.text = nuovo
+            await self._rivettorizza(chunk)
+            cambiati += 1
+
+        if cambiati:
+            await self._session.flush()
+        return cambiati
 
     async def _rivettorizza(self, chunk: Chunk) -> None:
         """Ricalcola il vettore e l'indice lessicale di un passaggio ripulito.

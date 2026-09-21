@@ -130,6 +130,7 @@ ISTRUZIONI = _istruzioni()
 @dataclass
 class EsitoDigestione:
     esaminati: int = 0
+    ricongiunti: int = 0
     ripuliti: int = 0
     scartati_a_vista: int = 0
     scartati_dal_giudizio: int = 0
@@ -145,6 +146,7 @@ class EsitoDigestione:
         return {
             "esaminati": self.esaminati,
             "classificati": self.classificati,
+            "ricongiunti": self.ricongiunti,
             "ripuliti": self.ripuliti,
             "scartati": {
                 "a_vista": self.scartati_a_vista,
