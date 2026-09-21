@@ -1,0 +1,86 @@
+.ritorno {
+  display: inline-block;
+  font-size: 0.8125rem;
+  color: var(--inchiostro-tenue);
+  text-decoration: none;
+  margin-bottom: 0.4rem;
+}
+
+.ritorno:hover {
+  color: var(--inchiostro);
+}
+
+.modulo {
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--filo-tenue);
+  border-radius: var(--raggio);
+  background: var(--superficie-alta);
+}
+
+.estratto {
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  color: var(--inchiostro-tenue);
+  line-height: 1.5;
+  max-width: 44ch;
+}
+
+.aggiunta {
+  margin-top: 1rem;
+}
+
+.caselle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+}
+
+/* Il bersaglio è l'etichetta intera, non il quadratino: 16 px di casella su
+ * un telefono si mancano, e chi manca tocca ciò che c'è accanto. */
+.casella {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.casella input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--rubrica);
+  cursor: pointer;
+}
+
+.casella input:disabled {
+  cursor: not-allowed;
+}
+
+.opzioni {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.opzione,
+.opzioneSpenta {
+  padding: 0.2rem 0;
+}
+
+.opzioneSpenta .casella {
+  color: var(--inchiostro-debole);
+  cursor: default;
+}
+
+.motivo {
+  margin: 0 0 0.3rem 1.65rem;
+  font-size: 0.75rem;
+  color: var(--inchiostro-debole);
+  line-height: 1.45;
+  max-width: 64ch;
+}

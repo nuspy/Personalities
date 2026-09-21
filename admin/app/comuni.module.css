@@ -1,0 +1,308 @@
+/* Gli elementi che tornano in ogni pagina della console. */
+
+.intestazione {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.titolo {
+  font-family: var(--display), serif;
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  font-weight: 400;
+  line-height: 1.1;
+  margin: 0 auto 0 0;
+}
+
+.sottotitolo {
+  color: var(--inchiostro-tenue);
+  font-size: 0.9375rem;
+  margin: 0.3rem 0 0;
+  max-width: 62ch;
+  line-height: 1.5;
+}
+
+/* ---- azioni ---- */
+
+.primaria,
+.secondaria,
+.distruttiva {
+  height: 40px;
+  min-height: 40px;
+  padding: 0 0.9rem;
+  border-radius: var(--raggio);
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: opacity 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.primaria {
+  border: 1px solid var(--inchiostro);
+  background: var(--inchiostro);
+  color: var(--carta);
+}
+
+.secondaria {
+  border: 1px solid var(--filo);
+  background: transparent;
+  color: var(--inchiostro-tenue);
+}
+
+.secondaria:hover:not(:disabled) {
+  border-color: var(--inchiostro-debole);
+  color: var(--inchiostro);
+}
+
+.distruttiva {
+  border: 1px solid var(--filo);
+  background: transparent;
+  color: var(--allarme);
+}
+
+.distruttiva:hover:not(:disabled) {
+  border-color: var(--allarme);
+}
+
+.primaria:disabled,
+.secondaria:disabled,
+.distruttiva:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.primaria:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+/* ---- tabella ---- */
+
+.contenitoreTabella {
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  /* La tabella scorre dentro il suo contenitore e non trascina la pagina:
+   * una pagina che scorre in orizzontale su mobile è il difetto che si nota
+   * per primo e si perdona per ultimo. */
+  overflow-x: auto;
+}
+
+.tabella {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.tabella th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--inchiostro-debole);
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--filo);
+  background: var(--superficie-alta);
+  white-space: nowrap;
+}
+
+.tabella td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--filo-tenue);
+  vertical-align: top;
+}
+
+.tabella tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tabella tbody tr:hover {
+  background: var(--superficie-alta);
+}
+
+.collegamento {
+  color: var(--inchiostro);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.collegamento:hover {
+  text-decoration: underline;
+}
+
+.mono {
+  font-family: var(--apparato), monospace;
+  font-size: 0.8125rem;
+  color: var(--inchiostro-tenue);
+}
+
+.numero {
+  font-family: var(--apparato), monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* ---- stato ---- */
+
+.stato {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-family: var(--apparato), monospace;
+  white-space: nowrap;
+}
+
+.pubblicata {
+  color: var(--quiete);
+}
+
+.bozza {
+  color: var(--inchiostro-debole);
+}
+
+.archiviata {
+  color: var(--inchiostro-debole);
+  text-decoration: line-through;
+}
+
+.etichetta {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  margin-right: 0.3rem;
+  border: 1px solid var(--filo);
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  color: var(--inchiostro-tenue);
+  white-space: nowrap;
+}
+
+/* ---- riquadri ---- */
+
+.riquadro {
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.riquadroTitolo {
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.riquadroNota {
+  color: var(--inchiostro-tenue);
+  font-size: 0.8125rem;
+  margin: 0 0 1rem;
+  line-height: 1.5;
+  max-width: 68ch;
+}
+
+/* ---- moduli ---- */
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.9rem;
+}
+
+.campoEtichetta {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--inchiostro-tenue);
+}
+
+.campoAiuto {
+  font-size: 0.75rem;
+  color: var(--inchiostro-debole);
+  line-height: 1.45;
+}
+
+.ingresso,
+.area,
+.selezione {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  background: var(--superficie);
+  /* 16px: sotto questa misura iOS ingrandisce la pagina a ogni tocco su un
+   * campo, e la console diventa inutilizzabile su un telefono. */
+  font-size: 1rem;
+  font-family: inherit;
+  line-height: 1.45;
+}
+
+.selezione,
+.ingresso {
+  min-height: 44px;
+}
+
+.area {
+  min-height: 9rem;
+  resize: vertical;
+  font-family: var(--apparato), monospace;
+  font-size: 0.875rem;
+}
+
+.ingresso:focus,
+.area:focus,
+.selezione:focus {
+  outline: none;
+  border-color: var(--inchiostro-debole);
+}
+
+.ingresso:focus-visible,
+.area:focus-visible,
+.selezione:focus-visible {
+  outline: 2px solid var(--rubrica);
+  outline-offset: 1px;
+}
+
+.riga {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.riga > * {
+  flex: 1 1 12rem;
+}
+
+.riga > .primaria,
+.riga > .secondaria {
+  flex: 0 0 auto;
+}
+
+/* ---- messaggi ---- */
+
+.errore {
+  border-left: 2px solid var(--allarme);
+  padding-left: 0.75rem;
+  color: var(--allarme);
+  font-size: 0.875rem;
+  margin: 0.75rem 0;
+}
+
+.vuoto {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--inchiostro-debole);
+  font-size: 0.9375rem;
+}
+
+.caricamento {
+  font-family: var(--apparato), monospace;
+  font-size: 0.8125rem;
+  color: var(--inchiostro-debole);
+  padding: 1.5rem 0;
+}
