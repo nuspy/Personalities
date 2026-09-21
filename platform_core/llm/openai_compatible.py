@@ -224,17 +224,35 @@ class OpenAICompatibleProvider(LLMProvider):
                 extra={**request.extra, **_formato(dialetto)},
             )
             try:
-                return await self.complete(richiesta)
+                testo = await self.complete(richiesta)
             except TruncatedResponse as exc:
-                if tentativo == TENTATIVI_DI_BUDGET or budget >= TETTO_TOKEN:
-                    raise GenerationError(
-                        f"il modello non produce una risposta nemmeno con "
-                        f"{budget} token: {exc}"
-                    ) from exc
-                budget = prossimo_budget(budget)
-                logger.info(
-                    "Risposta troncata: riprovo con max_tokens=%d", budget,
+                motivo = str(exc)
+            else:
+                # Una risposta **con** contenuto ma tagliata a metà non
+                # solleva `TruncatedResponse`: quella segnala il caso in cui il
+                # modello ha speso tutto a ragionare e non ha scritto nulla.
+                # Qui il testo c'è, e per il testo libero sarebbe utilizzabile
+                # — ma un JSON interrotto a metà graffa non lo è.
+                #
+                # È il difetto che ha fatto fallire la digestione del primo
+                # corpus: quattro lotti su dodici persi, con in log un JSON
+                # che cominciava bene e si fermava a metà. Il budget adattivo
+                # c'era e non scattava mai.
+                if _sembra_troncato(testo):
+                    motivo = "JSON incompleto: struttura non chiusa"
+                else:
+                    return testo
+
+            if tentativo == TENTATIVI_DI_BUDGET or budget >= TETTO_TOKEN:
+                raise GenerationError(
+                    f"il modello non produce una risposta utilizzabile nemmeno "
+                    f"con {budget} token: {motivo}"
                 )
+            budget = prossimo_budget(budget)
+            logger.info(
+                "Risposta inutilizzabile (%s): riprovo con max_tokens=%d",
+                motivo, budget,
+            )
 
         raise GenerationError("budget esaurito")  # pragma: no cover
 
@@ -283,3 +301,35 @@ def _formato(dialetto: Optional[str]) -> Dict[str, Any]:
     """Il frammento di payload che impone il formato, o niente."""
     formato = formato_risposta(dialetto)
     return {"response_format": formato} if formato else {}
+
+
+def _sembra_troncato(testo: str) -> bool:
+    """Vero se il testo è un JSON cominciato e mai chiuso.
+
+    Conta le parentesi fuori dalle stringhe: se ne restano di aperte, la
+    risposta si è interrotta. Non è un parser — non serve — ma distingue il
+    caso che conta da un modello che ha semplicemente risposto in prosa,
+    dove riprovare con più spazio non cambierebbe nulla.
+    """
+    pulito = testo.strip()
+    if not pulito.startswith(("{", "[", "```")):
+        return False
+
+    aperte = 0
+    in_stringa = False
+    fuga = False
+
+    for carattere in pulito:
+        if fuga:
+            fuga = False
+            continue
+        if carattere == "\\":
+            fuga = True
+        elif carattere == '"':
+            in_stringa = not in_stringa
+        elif not in_stringa and carattere in "{[":
+            aperte += 1
+        elif not in_stringa and carattere in "}]":
+            aperte -= 1
+
+    return aperte > 0 or in_stringa

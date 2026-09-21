@@ -37,12 +37,22 @@ class Corrispondenza:
     kb_id: uuid.UUID
     punteggio: float
 
+    #: Cio' che la digestione ha capito di questo passaggio. Viaggia con la
+    #: corrispondenza perche' serve a valle: la categoria decide se un
+    #: passaggio vada nel dataset di addestramento o nel recupero fattuale, e
+    #: la provenienza quanto pesino le sue parole per la voce.
+    categoria: Optional[str] = None
+    provenienza: Optional[str] = None
+    qualita: Optional[float] = None
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "chunk_id": str(self.chunk_id),
             "documento": self.documento_titolo,
             "sezione": self.sezione,
             "punteggio": round(self.punteggio, 4),
+            "categoria": self.categoria,
+            "provenienza": self.provenienza,
         }
 
 
@@ -91,12 +101,17 @@ class PgVectorStore(VectorStore):
             SELECT
                 c.id, c.text, c.ordinal, c.section,
                 d.id AS documento_id, d.title, d.uri,
-                c.kb_id,
+                c.kb_id, c.label_main, c.provenance, c.quality,
                 1 - (v.embedding <=> CAST(:embedding AS vector)) AS somiglianza
             FROM chunk_vectors v
             JOIN chunks c ON c.id = v.chunk_id
             JOIN documents d ON d.id = c.document_id
             WHERE v.kb_id = ANY(:kb_ids)
+              -- Cio' che la digestione ha scartato non torna mai: e' apparato
+              -- editoriale, duplicati, o testo che non insegna nulla. Filtrare
+              -- qui e non a valle significa che nessuna strada lo riporta
+              -- dentro per distrazione.
+              AND c.discarded = false
             ORDER BY v.embedding <=> CAST(:embedding AS vector)
             LIMIT :limite
         """)
@@ -115,6 +130,8 @@ class PgVectorStore(VectorStore):
                 chunk_id=r.id, testo=r.text, ordinale=r.ordinal, sezione=r.section,
                 documento_id=r.documento_id, documento_titolo=r.title,
                 documento_uri=r.uri, kb_id=r.kb_id, punteggio=float(r.somiglianza),
+                categoria=r.label_main, provenienza=r.provenance,
+                qualita=float(r.quality) if r.quality is not None else None,
             )
             for r in risultato
         ]
@@ -172,7 +189,7 @@ class RicercaLessicale:
             SELECT
                 c.id, c.text, c.ordinal, c.section,
                 d.id AS documento_id, d.title, d.uri,
-                c.kb_id,
+                c.kb_id, c.label_main, c.provenance, c.quality,
                 ts_rank_cd(c.tsv, q.query) AS rilevanza
             FROM chunks c
             JOIN documents d ON d.id = c.document_id
@@ -184,6 +201,7 @@ class RicercaLessicale:
                 )::tsquery AS query
             ) q
             WHERE c.kb_id = ANY(:kb_ids)
+              AND c.discarded = false
               AND q.query IS NOT NULL
               AND c.tsv @@ q.query
             ORDER BY rilevanza DESC
@@ -204,6 +222,8 @@ class RicercaLessicale:
                 chunk_id=r.id, testo=r.text, ordinale=r.ordinal, sezione=r.section,
                 documento_id=r.documento_id, documento_titolo=r.title,
                 documento_uri=r.uri, kb_id=r.kb_id, punteggio=float(r.rilevanza),
+                categoria=r.label_main, provenienza=r.provenance,
+                qualita=float(r.quality) if r.quality is not None else None,
             )
             for r in risultato
         ]

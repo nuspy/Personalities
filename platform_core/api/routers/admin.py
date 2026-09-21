@@ -438,6 +438,12 @@ async def prova_recupero(
                 round(p.rilevanza_lessicale, 4) if p.rilevanza_lessicale else None
             ),
             "trovato_da_entrambe": p.trovato_da_entrambe,
+            # Cio' che la digestione ha capito: serve a chi studia un recupero
+            # sbagliato per sapere se il problema sia nell'ordinamento o nella
+            # classificazione del passaggio.
+            "categoria": c.categoria,
+            "provenienza": c.provenienza,
+            "qualita": c.qualita,
         }
 
     return {

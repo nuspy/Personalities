@@ -178,6 +178,45 @@ class Chunk(Base):
     #: esatta — e da solo nessuno dei due basta.
     tsv: Mapped[Optional[Any]] = mapped_column(TSVECTOR)
 
+    # -- ciò che la digestione ha capito -----------------------------------
+
+    #: Categoria → quanto quel passaggio ne è portatore. JSONB e non colonne
+    #: perché le etichette non sono esclusive: una lettera contiene insieme
+    #: lessico, valori e forma del pensiero, e una casella sola butterebbe via
+    #: due terzi di ciò che insegna.
+    labels: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB)
+
+    #: La categoria dominante. Ridondante rispetto a `labels`, e apposta: il
+    #: recupero filtra per questa a ogni interrogazione, e cercare dentro un
+    #: JSONB costa piu' di leggere una colonna indicizzata.
+    label_main: Mapped[Optional[str]] = mapped_column(String(20))
+
+    #: Chi lo dice: l'autore, un contemporaneo, uno storico, il curatore. Asse
+    #: separato dalle categorie perche' un avvenimento raccontato da Seneca
+    #: vale diversamente dallo stesso raccontato da Tacito.
+    provenance: Mapped[Optional[str]] = mapped_column(String(20))
+
+    #: Quanto vale la pena tenerlo, fra 0 e 1.
+    quality: Mapped[Optional[float]] = mapped_column(Float)
+
+    #: Vero quando la digestione lo ha escluso dal recupero. Non si cancella:
+    #: un passaggio scartato per errore va poterlo rivedere, e un corpus da
+    #: cui sono spariti dei pezzi non si sa piu' ricostruire.
+    discarded: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    discard_reason: Mapped[Optional[str]] = mapped_column(Text)
+
+    #: Il testo com'era prima della pulizia, quando ne ha subita una.
+    #:
+    #: La pulizia modifica `text`, ed e' l'unica operazione della digestione
+    #: che non si puo' disfare guardando le etichette. Senza l'originale, una
+    #: rimozione sbagliata — ed e' successo: il modello ha tolto la prosa
+    #: dell'autore lasciando l'apparato — si porta via il testo per sempre, e
+    #: rieseguire la digestione lavora su cio' che resta invece che su cio'
+    #: che c'era.
+    text_original: Mapped[Optional[str]] = mapped_column(Text)
+
     document: Mapped[Document] = relationship(back_populates="chunks")
     vector: Mapped[Optional["ChunkVector"]] = relationship(
         back_populates="chunk", cascade="all, delete-orphan", uselist=False,
@@ -190,6 +229,9 @@ class Chunk(Base):
         # lessicale. Senza, ogni interrogazione scandisce l'intera tabella dei
         # passaggi, e il costo si vede solo quando il corpus è già grande.
         Index("ix_chunks_tsv", "tsv", postgresql_using="gin"),
+        # Il recupero interroga sempre «i passaggi vivi di questa base», e
+        # spesso «di questa categoria»: l'indice parte da lì.
+        Index("ix_chunks_kb_vivi", "kb_id", "discarded", "label_main"),
     )
 
 
