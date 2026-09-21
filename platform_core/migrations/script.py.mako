@@ -10,6 +10,10 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+# L'autogenerazione scrive `pgvector.sqlalchemy.Vector(...)` nelle colonne di
+# embedding ma non ne emette l'import: senza questa riga la migrazione
+# fallisce con `NameError` al momento di applicarla, non di generarla.
+import pgvector.sqlalchemy
 ${imports if imports else ""}
 
 revision: str = ${repr(up_revision)}

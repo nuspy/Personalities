@@ -71,10 +71,13 @@ class User(Base, TimestampMixin):
 class Conversation(Base, TimestampMixin, OwnedMixin):
     """Uno scambio continuato fra un utente e una personalità.
 
-    `personality_version_id` non c'è ancora — le personalità arrivano nella
-    fase 3 — ma è prevista dal piano fin d'ora, perché senza quella colonna una
-    conversazione di tre mesi fa non è riproducibile: il prompt che l'ha
-    prodotta sarebbe già cambiato.
+    `personality_version_id` è registrato all'apertura e non risolto ogni
+    volta: è ciò che rende riproducibile una conversazione di tre mesi fa.
+    Senza, il prompt che l'ha prodotta sarebbe già cambiato, e chi indaga su
+    una risposta sbagliata guarderebbe un testo diverso da quello che l'ha
+    causata. Entrambi i riferimenti sono opzionali perché una conversazione
+    senza personalità resta legittima — è quella della fase 0, e serve ancora
+    a provare il motore senza interporre un carattere.
 
     `last_message_at` è ridondante rispetto a `max(messages.created_at)`, e lo
     è apposta: l'elenco delle conversazioni si ordina per attività recente, e
@@ -84,6 +87,17 @@ class Conversation(Base, TimestampMixin, OwnedMixin):
     __tablename__ = "conversations"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+
+    personality_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("personalities.id", ondelete="SET NULL"),
+    )
+    #: `RESTRICT` e non `SET NULL`: una versione a cui una conversazione fa
+    #: riferimento non deve poter sparire, o la conversazione diventerebbe
+    #: irriproducibile proprio mentre il resto dello schema promette che non
+    #: possa accadere. Le versioni si archiviano, non si cancellano.
+    personality_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("personality_versions.id", ondelete="RESTRICT"),
+    )
 
     title: Mapped[Optional[str]] = mapped_column(String(300))
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)

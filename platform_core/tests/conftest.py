@@ -51,6 +51,15 @@ def _database_raggiungibile() -> bool:
             ).fetchone()
             if not esiste:
                 c.execute(sql.SQL("create database {}").format(sql.Identifier(nome)))
+
+        # Le estensioni vanno installate **in ogni database**: lo script di
+        # inizializzazione del container tocca solo quello creato all'avvio, e
+        # un database di test senza `vector` fallisce alla creazione delle
+        # tabelle con «type "vector" does not exist» — un errore che sembra un
+        # problema dei modelli e invece è di provisioning.
+        with psycopg.connect(f"{amministrazione}/{nome}", connect_timeout=3, autocommit=True) as c:
+            c.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            c.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
         return True
     except Exception:
         return False

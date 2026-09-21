@@ -77,6 +77,15 @@ class Settings(BaseSettings):
     #: legittima, un silenzio di due minuti no.
     llm_stream_timeout: float = 120.0
 
+    #: Vettorizzazione. Separata dalla generazione perche' i due servizi
+    #: possono stare su macchine diverse: l'embedding e' leggero e conviene
+    #: tenerlo vicino al database, la generazione vuole l'acceleratore.
+    embedding_base_url: str = "http://127.0.0.1:1234/v1"
+    #: Multilingue e a 1024 dimensioni, come la colonna `vector` dello schema.
+    #: Cambiarlo richiede una migrazione e il ricalcolo dell'indice: non e' una
+    #: preferenza, e' una decisione di piattaforma.
+    embedding_model: str = "text-embedding-qwen3-embedding-0.6b"
+
     cors_origins: List[str] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://localhost:3001"]
     )
