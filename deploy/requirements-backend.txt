@@ -22,3 +22,13 @@ opentelemetry-instrumentation-fastapi>=0.49b0
 opentelemetry-instrumentation-sqlalchemy>=0.49b0
 opentelemetry-instrumentation-httpx>=0.49b0
 opentelemetry-exporter-otlp-proto-http>=1.28
+
+# Trascrizione di audio e video. Non serve all'API — che non trascrive nulla —
+# ma al worker che ingerisce i corpora: si installa con l'estra `ingestione`
+# perche' trascina onnxruntime e ctranslate2, e su un nodo che serve solo
+# richieste HTTP sarebbero centinaia di megabyte per niente.
+# faster-whisper>=1.1      (installare sul worker di ingestione)
+#
+# Richiede anche ffmpeg nel PATH, che non e' un pacchetto Python:
+#   Debian/Ubuntu: apt install ffmpeg
+#   Windows:       scoop install ffmpeg
