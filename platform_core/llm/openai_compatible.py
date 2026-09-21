@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 import httpx
@@ -30,6 +31,10 @@ from ..settings import Settings, get_settings
 from .base import (
     GenerationError, GenerationRequest, LLMProvider, StreamChunk,
     TruncatedResponse, Usage,
+)
+from .json_mode import (
+    DIALETTI, TENTATIVI_DI_BUDGET, TETTO_TOKEN, e_rifiuto_del_formato,
+    estrai_json, formato_risposta, prossimo_budget,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,6 +57,11 @@ class OpenAICompatibleProvider(LLMProvider):
         self._default_model = default_model or settings.llm_model
         self._timeout = timeout or settings.llm_stream_timeout
         self._modello_risolto: Optional[str] = None
+        #: Il dialetto JSON che questo server accetta. Si scopre alla prima
+        #: richiesta e poi non si ridiscute: rinegoziarlo ogni volta
+        #: costerebbe una richiesta fallita per ogni chiamata.
+        self._dialetto_json: Optional[str] = None
+        self._dialetto_negoziato = False
 
     # -- interrogazione ----------------------------------------------------
 
@@ -161,6 +171,73 @@ class OpenAICompatibleProvider(LLMProvider):
                 pezzi.append(chunk.text)
         return "".join(pezzi)
 
+    async def complete_json(self, request: GenerationRequest) -> Any:
+        """Genera e interpreta una risposta JSON.
+
+        Mette insieme le tre difese di `json_mode`: negozia il dialetto che il
+        server accetta, alza il budget se il modello lo esaurisce ragionando, e
+        interpreta con tolleranza ciò che torna.
+
+        Non è streaming perché non avrebbe senso: un JSON parziale non si può
+        mostrare, e chi chiama aspetta comunque la struttura completa.
+        """
+        dialetti = [self._dialetto_json] if self._dialetto_negoziato else list(DIALETTI)
+        ultimo_errore: Optional[Exception] = None
+
+        for dialetto in dialetti:
+            try:
+                testo = await self._genera_con_budget(request, dialetto)
+            except GenerationError as exc:
+                if not e_rifiuto_del_formato(exc):
+                    raise
+                ultimo_errore = exc
+                logger.info(
+                    "Il server non accetta response_format '%s': provo il successivo",
+                    dialetto,
+                )
+                continue
+
+            if not self._dialetto_negoziato:
+                self._dialetto_json = dialetto
+                self._dialetto_negoziato = True
+                logger.info(
+                    "Modalità JSON negoziata: %s",
+                    f"response_format '{dialetto}'" if dialetto
+                    else "nessun vincolo formale",
+                )
+            return estrai_json(testo)
+
+        raise GenerationError(
+            f"nessuna modalità JSON accettata dal server ({ultimo_errore})"
+        )
+
+    async def _genera_con_budget(
+        self, request: GenerationRequest, dialetto: Optional[str]
+    ) -> str:
+        """Riprova con più spazio quando il modello esaurisce il budget."""
+        budget = request.max_tokens or 4096
+
+        for tentativo in range(TENTATIVI_DI_BUDGET + 1):
+            richiesta = replace(
+                request,
+                max_tokens=budget,
+                extra={**request.extra, **_formato(dialetto)},
+            )
+            try:
+                return await self.complete(richiesta)
+            except TruncatedResponse as exc:
+                if tentativo == TENTATIVI_DI_BUDGET or budget >= TETTO_TOKEN:
+                    raise GenerationError(
+                        f"il modello non produce una risposta nemmeno con "
+                        f"{budget} token: {exc}"
+                    ) from exc
+                budget = prossimo_budget(budget)
+                logger.info(
+                    "Risposta troncata: riprovo con max_tokens=%d", budget,
+                )
+
+        raise GenerationError("budget esaurito")  # pragma: no cover
+
     # -- interni -----------------------------------------------------------
 
     def _headers(self) -> Dict[str, str]:
@@ -200,3 +277,9 @@ class OpenAICompatibleProvider(LLMProvider):
             total_tokens=uso.get("total_tokens", 0),
             model=model,
         )
+
+
+def _formato(dialetto: Optional[str]) -> Dict[str, Any]:
+    """Il frammento di payload che impone il formato, o niente."""
+    formato = formato_risposta(dialetto)
+    return {"response_format": formato} if formato else {}

@@ -75,7 +75,10 @@ class EsitoTurno:
 
 
 def strato_stabile_da_versione(
-    versione: PersonalityVersion, *, modo: str = "rag",
+    versione: PersonalityVersion,
+    *,
+    modo: str = "rag",
+    politiche: Sequence[str] = (),
 ) -> StratoStabile:
     """Costruisce lo strato 0 da una versione pubblicata.
 
@@ -98,6 +101,7 @@ def strato_stabile_da_versione(
     return StratoStabile(
         prompt_personalita=prompt,
         regole=regole,
+        politiche=list(politiche),
         documenti_integrali=list((versione.rag_config or {}).get("documenti_integrali", [])),
     )
 
@@ -125,6 +129,7 @@ class PersonaEngine:
         riassunto: str = "",
         modo: str = "rag",
         modi_disponibili: Sequence[str] = ("rag",),
+        politiche: Sequence[str] = (),
     ) -> EsitoTurno:
         """Recupera e costruisce il prompt, senza ancora generare.
 
@@ -161,7 +166,9 @@ class PersonaEngine:
         )
 
         esito.contesto = self._builder.costruisci(
-            stabile=strato_stabile_da_versione(versione, modo=esito.modo),
+            stabile=strato_stabile_da_versione(
+                versione, modo=esito.modo, politiche=politiche,
+            ),
             volatile=volatile,
             storico=storico,
             domanda=domanda,

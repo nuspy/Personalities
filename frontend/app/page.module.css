@@ -489,3 +489,24 @@
   background: var(--carta-alta);
   cursor: default;
 }
+
+/* ---- verdetto del verificatore ---- */
+
+.nonVerificato {
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  color: var(--inchiostro-debole);
+  margin: 0.75rem 0 0;
+}
+
+.elencoInfondate {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.motivo {
+  color: var(--inchiostro-tenue);
+}

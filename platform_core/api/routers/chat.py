@@ -27,13 +27,15 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ...auth.dependencies import CurrentUser, DbSession
-from ...api.deps import get_embedder, get_llm_provider
+from ...api.deps import get_embedder, get_guardrail, get_llm_provider
 from ...domain.knowledge_models import PersonalityVersion
 from ...domain.models import Conversation
 from ...domain.repositories import (
     ConversationRepository, PersonalityRepository, TraceRepository,
 )
 from ...domain.session import SessionFactory
+from ...guards.groundcheck import Giudice, controlla_citazioni
+from ...guards.policy import RegistroGuardrail
 from ...knowledge.embedding import Embedder
 from ...knowledge.retriever import Retriever
 from ...llm.base import (
@@ -113,6 +115,7 @@ async def chat(
     session_factory: SessionFactory,
     provider: Annotated[LLMProvider, Depends(get_llm_provider)],
     embedder: Annotated[Embedder, Depends(get_embedder)],
+    guardrail: Annotated[RegistroGuardrail, Depends(get_guardrail)],
 ) -> StreamingResponse:
     """Manda un messaggio e ricevi la risposta mentre viene generata."""
     repo = ConversationRepository(session)
@@ -199,13 +202,29 @@ async def chat(
     )
 
     turno = None
+    rubriche = []
     if versione is not None:
         turno = await motore.prepara(
             versione=versione,
             domanda=payload.message,
             kb_ids=kb_ids,
             storico=messaggi_storico,
+            # La metà preventiva dei guardrail entra nello strato stabile:
+            # costa una volta sola perché sta nel prefisso, e agisce prima che
+            # il problema esista.
+            politiche=guardrail.istruzioni_per(slug_personalita),
         )
+        rubriche = guardrail.rubriche_per(slug_personalita)
+
+    #: `citations` verifica soltanto le etichette, `nli` interroga un giudice.
+    #: La scelta sta sulla versione della personalita' perche' dipende da cosa
+    #: quella voce fa: una che risponde di fatti merita il giudice, una che
+    #: consiglia e basta pagherebbe una chiamata per nulla.
+    livello_verifica = (
+        (versione.guard_config or {}).get("groundcheck", "citations")
+        if versione is not None
+        else "citations"
+    )
 
     async def flusso() -> AsyncIterator[str]:
         yield sse("start", {
@@ -271,21 +290,44 @@ async def chat(
             yield sse("error", {"message": "Errore interno.", "recoverable": False})
 
         risposta = "".join(pezzi)
-        citazioni_inventate: List[str] = []
+        passaggi = turno.recupero.scelti if (turno and turno.recupero) else []
+        forniti = [p.etichetta for p in passaggi]
+
+        # Livello deterministico: sempre, perché costa zero e non può
+        # sbagliare. Si esegue prima di `done` — l'utente deve sapere se ciò
+        # che ha appena letto cita qualcosa che non esiste.
+        esito = controlla_citazioni(risposta, forniti)
+        if esito.riferimenti_inventati:
+            logger.warning(
+                "Riferimenti inventati (%s): %s",
+                correlation_id, esito.riferimenti_inventati,
+            )
+
+        yield sse("done", {
+            "usage": uso.to_dict() if uso else None,
+            "characters": len(risposta),
+            "riferimenti_inventati": esito.riferimenti_inventati,
+        })
+
+        # Il giudice **dopo** `done`: costa una chiamata intera, e farla
+        # aspettare a chi ha già finito di leggere significherebbe spegnere la
+        # verifica alla prima lamentela sulla lentezza. Il verdetto arriva
+        # quando arriva, e il client aggiorna la nota sotto la risposta.
+        if livello_verifica == "nli" and risposta.strip() and passaggi:
+            esito = await Giudice(provider).valuta(
+                risposta, passaggi, rubriche=rubriche,
+            )
+            yield sse("verifica", {
+                "livello": esito.livello,
+                "fondata": esito.fondata,
+                "non_eseguito": esito.non_eseguito,
+                "infondate": [
+                    {"testo": a.testo, "nota": a.nota} for a in esito.infondate
+                ],
+                "conteggi": esito.to_dict()["conteggi"],
+            })
 
         if risposta.strip():
-            if turno is not None and turno.contesto is not None:
-                # Groundcheck deterministico: costa zero e non richiede un
-                # secondo modello. Il livello `nli` arriva nella fase 2.
-                citazioni_inventate = sorted(
-                    riferimenti_citati(risposta) - turno.contesto.riferimenti_validi()
-                )
-                if citazioni_inventate:
-                    logger.warning(
-                        "Riferimenti inventati (%s): %s",
-                        correlation_id, citazioni_inventate,
-                    )
-
             # Una sessione nuova: quella della richiesta è chiusa dalla
             # dipendenza appena l'endpoint restituisce la `StreamingResponse`,
             # mentre questo generatore continua a girare dopo.
@@ -308,18 +350,9 @@ async def chat(
                                 k: v for k, v in turno.traccia_risposta().items()
                                 if k in ("retrieved", "usage", "latency_ms")
                             },
-                            grounding={
-                                "riferimenti_citati": sorted(riferimenti_citati(risposta)),
-                                "riferimenti_inventati": citazioni_inventate,
-                            },
+                            grounding=esito.to_dict(),
                         )
                     await scrittura.commit()
-
-        yield sse("done", {
-            "usage": uso.to_dict() if uso else None,
-            "characters": len(risposta),
-            "riferimenti_inventati": citazioni_inventate,
-        })
 
     return StreamingResponse(
         flusso(),

@@ -63,6 +63,14 @@ class StratoStabile:
 
     prompt_personalita: str
     regole: List[str] = field(default_factory=list)
+
+    #: Le istruzioni dei guardrail: paragrafi, non righe di elenco, e per
+    #: questo separate dalle regole. Sono la metà preventiva di una politica —
+    #: l'altra metà, la rubrica del giudice, non arriva mai qui: se il
+    #: personaggio leggesse con quali criteri sarà verificato, imparerebbe a
+    #: soddisfarli invece di comportarsi bene.
+    politiche: List[str] = field(default_factory=list)
+
     #: Documenti piccoli e stabili inclusi per intero (CAG): entrano nel
     #: prefisso e quindi nello sconto, a differenza dei passaggi recuperati.
     documenti_integrali: List[str] = field(default_factory=list)
@@ -78,6 +86,11 @@ class StratoStabile:
                 "Regole di comportamento:\n"
                 + "\n".join(f"- {r}" for r in sorted(self.regole))
             )
+
+        if self.politiche:
+            # Anche queste ordinate, e per la stessa ragione: l'ordine in cui
+            # i file dei guardrail vengono letti dal disco non è garantito.
+            parti.append("\n\n".join(sorted(p.strip() for p in self.politiche)))
 
         if self.documenti_integrali:
             parti.append(

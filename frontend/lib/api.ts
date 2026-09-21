@@ -44,6 +44,14 @@ export interface Personalita {
   description: string | null;
 }
 
+export interface Verifica {
+  livello: string;
+  fondata: boolean;
+  non_eseguito: string;
+  infondate: { testo: string; nota: string }[];
+  conteggi: { fatti: number; infondate: number; totale: number };
+}
+
 export type EventoChat =
   | { tipo: "inizio"; conversationId: string; correlationId: string; personalita: string | null }
   | { tipo: "fonti"; fonti: Fonte[] }
@@ -51,7 +59,10 @@ export type EventoChat =
   | { tipo: "pensa" }
   | { tipo: "degradato"; motivo: string }
   | { tipo: "errore"; messaggio: string; recuperabile: boolean }
-  | { tipo: "fine"; consumo: Consumo | null; inventati: string[] };
+  | { tipo: "fine"; consumo: Consumo | null; inventati: string[] }
+  /* Arriva **dopo** `fine`: il giudizio costa una chiamata intera, e chi
+     ha già finito di leggere non deve aspettarlo. */
+  | { tipo: "verifica"; verifica: Verifica };
 
 export class ErroreApi extends Error {
   constructor(message: string, readonly stato: number) {
@@ -210,6 +221,8 @@ function interpreta(blocco: string): EventoChat | null {
         consumo: (corpo.usage as Consumo) ?? null,
         inventati: (corpo.riferimenti_inventati as string[]) ?? [],
       };
+    case "verifica":
+      return { tipo: "verifica", verifica: corpo as unknown as Verifica };
     default:
       return null;
   }

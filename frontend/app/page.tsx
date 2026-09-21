@@ -11,6 +11,7 @@ import {
   type Consumo,
   type Fonte,
   type Personalita,
+  type Verifica,
 } from "@/lib/api";
 import stili from "./page.module.css";
 
@@ -22,6 +23,7 @@ interface Turno {
   consumo?: Consumo | null;
   errore?: string;
   inventati?: string[];
+  verifica?: Verifica;
 }
 
 function adesso(): string {
@@ -240,6 +242,9 @@ function Conversazione() {
               consumo: evento.consumo,
               inventati: evento.inventati,
             }));
+            break;
+          case "verifica":
+            aggiornaUltimo((t) => ({ ...t, verifica: evento.verifica }));
             break;
         }
       }
@@ -469,6 +474,7 @@ function Riga({
           <p className={stili.pensa}>sta ragionando…</p>
         )}
         {turno.errore && <p className={stili.errore}>{turno.errore}</p>}
+        {turno.verifica && <Verdetto verifica={turno.verifica} />}
         {turno.inventati && turno.inventati.length > 0 && (
           /* Un riferimento citato che non esiste fra quelli forniti. Si
              rileva confrontando due insiemi: nessun modello di verifica, costo
@@ -481,6 +487,40 @@ function Riga({
         )}
       </div>
     </article>
+  );
+}
+
+/* Il verdetto del verificatore.
+ *
+ * Si mostra solo quando c'è qualcosa da dire. Una nota «verificato: tutto a
+ * posto» sotto ogni risposta diventa rumore nel giro di tre turni, e il
+ * rumore si impara a ignorare — compreso il giorno in cui dice altro. */
+function Verdetto({ verifica }: { verifica: Verifica }) {
+  if (verifica.non_eseguito) {
+    return (
+      <p className={stili.nonVerificato}>
+        Non ho potuto verificare questa risposta.
+      </p>
+    );
+  }
+  if (verifica.fondata) return null;
+
+  return (
+    <div className={stili.avviso}>
+      <p>
+        {verifica.infondate.length === 1
+          ? "Un'affermazione non è sostenuta dai documenti:"
+          : `${verifica.infondate.length} affermazioni non sono sostenute dai documenti:`}
+      </p>
+      <ul className={stili.elencoInfondate}>
+        {verifica.infondate.map((i, n) => (
+          <li key={n}>
+            <q>{i.testo}</q>
+            {i.nota && <span className={stili.motivo}> — {i.nota}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

@@ -87,9 +87,24 @@ def get_embedder():
     return OpenAICompatibleEmbedder()
 
 
+@lru_cache(maxsize=1)
+def get_guardrail():
+    """I guardrail, letti una volta dal disco.
+
+    In cache perche' sono file che non cambiano mentre il processo gira: in
+    sviluppo basta riavviare, e in produzione arrivano con l'immagine. Se un
+    giorno dovranno cambiare a caldo, questo e' il punto in cui invalidarli —
+    non ogni chiamante.
+    """
+    from ..guards.policy import RegistroGuardrail
+
+    return RegistroGuardrail()
+
+
 def reset_dependencies() -> None:
     """Dimentica le istanze memorizzate. Solo per i test."""
     get_key_value_store.cache_clear()
     get_capability_registry.cache_clear()
     get_llm_provider.cache_clear()
     get_embedder.cache_clear()
+    get_guardrail.cache_clear()
