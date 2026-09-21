@@ -12,3 +12,4 @@ __pycache__/
 /historical_persona_pipeline/cache/
 # Cache di compilazione generata da Unsloth all'avvio dell'addestramento.
 /unsloth_compiled_cache/
+builds/
