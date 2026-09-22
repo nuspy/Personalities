@@ -174,8 +174,45 @@ def _cerca(intestazioni: Mapping[str, str], nome: str) -> str:
     return ""
 
 
+class PagamentiNonDisponibili(RuntimeError):
+    """Nessun fornitore di pagamento configurato."""
+
+
+class PagamentiDisattivati:
+    """Nessun fornitore ancora: i piani gratuiti funzionano, quelli a pagamento aspettano.
+
+    È il modo di andare in produzione prima di aver scelto con chi incassare.
+    Il simulatore lì non si può usare — regalerebbe i piani a chiunque apra la
+    sua pagina — e senza un fornitore il servizio non partirebbe affatto.
+    Qui un pagamento si rifiuta con un motivo che si può mostrare, e nessun
+    evento viene accettato: non c'è nessuno autorizzato a mandarne.
+    """
+
+    name = "disattivato"
+
+    def url_di_pagamento(self, checkout: PaymentCheckout, *, ritorno: str) -> str:
+        raise PagamentiNonDisponibili(
+            "I pagamenti non sono ancora attivi: i piani a pagamento saranno "
+            "disponibili a breve."
+        )
+
+    def verifica(self, corpo: bytes, intestazioni: Mapping[str, str]) -> EventoPagamento:
+        raise FirmaNonValida("nessun fornitore di pagamento configurato")
+
+    async def crea_abbonamento(self, user_id: int, piano: Plan, *, annuale: bool = False) -> str:
+        return f"gratuito-{uuid.uuid4().hex[:12]}"
+
+    async def disdici(self, external_id: str) -> None:
+        return None
+
+    async def e_pagato(self, external_id: str) -> bool:
+        # Solo ciò che non costava nulla si rinnova: un abbonamento pagato
+        # rimasto da un fornitore precedente non ha più chi lo incassi.
+        return external_id.startswith("gratuito-")
+
+
 def provider_pagamenti(settings: Optional[Settings] = None) -> ProviderPagamenti:
-    """Il fornitore configurato. Oggi soltanto il simulatore.
+    """Il fornitore configurato: il simulatore, o nessuno.
 
     Un nome sconosciuto è un errore all'avvio e non un ripiego silenzioso sul
     simulatore: in produzione il ripiego significherebbe regalare i piani.
@@ -183,10 +220,12 @@ def provider_pagamenti(settings: Optional[Settings] = None) -> ProviderPagamenti
     settings = settings or get_settings()
     if settings.billing_provider == "mock":
         return PagamentiSimulati(settings)
+    if settings.billing_provider == "disattivato":
+        return PagamentiDisattivati()
     raise ValueError(
         f"fornitore di pagamento sconosciuto: «{settings.billing_provider}». "
-        f"Oggi è disponibile solo `mock`; un fornitore vero si aggiunge "
-        f"implementando ProviderPagamenti."
+        f"Oggi sono disponibili `mock` e `disattivato`; un fornitore vero si "
+        f"aggiunge implementando ProviderPagamenti."
     )
 
 

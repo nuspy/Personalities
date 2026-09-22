@@ -32,8 +32,8 @@ from pydantic import BaseModel, Field
 from ...auth.dependencies import CurrentUser, DbSession, require_role
 from ...billing.credits import RegistroCrediti
 from ...billing.pagamenti import (
-    ANNULLATO, PAGATO, FirmaNonValida, GestorePagamenti, PagamentiSimulati,
-    provider_pagamenti,
+    ANNULLATO, PAGATO, FirmaNonValida, GestorePagamenti, PagamentiNonDisponibili,
+    PagamentiSimulati, provider_pagamenti,
 )
 from ...billing.plans import GestoreAbbonamenti
 from ...billing.quote import ContatoreQuote
@@ -232,9 +232,18 @@ async def apri_checkout(
         )
 
     ritorno = f"{get_settings().web_public_url.rstrip('/')}/piano"
-    checkout, url = await GestorePagamenti(session).apri(
-        user.id, piano, annuale=payload.annuale, ritorno=ritorno,
-    )
+    try:
+        # Un savepoint e non un rollback: si annulla solo la sessione di
+        # pagamento creata prima di chiedere l'indirizzo, non il resto della
+        # transazione.
+        async with session.begin_nested():
+            checkout, url = await GestorePagamenti(session).apri(
+                user.id, piano, annuale=payload.annuale, ritorno=ritorno,
+            )
+    except PagamentiNonDisponibili as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc),
+        ) from exc
     await session.commit()
     return {"checkout_id": str(checkout.id), "url": url, "importo": checkout.importo, "valuta": checkout.currency}
 

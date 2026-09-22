@@ -44,8 +44,17 @@ async def lifespan(app: FastAPI):
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    for problem in settings.validate_production():
+    problemi = settings.validate_production()
+    for problem in problemi:
         logger.error("Configurazione non adatta alla produzione: %s", problem)
+    if problemi and settings.environment == "prod":
+        # In produzione non si parte: un'API con l'autenticazione spenta o il
+        # pagamento simulato non è un servizio degradato, è una porta aperta —
+        # e un errore nei log, a servizio avviato, lo legge qualcuno troppo
+        # tardi.
+        raise RuntimeError(
+            "configurazione non adatta alla produzione: " + "; ".join(problemi)
+        )
 
     logger.info(
         "Avvio di %s (ruolo=%s, ambiente=%s)",

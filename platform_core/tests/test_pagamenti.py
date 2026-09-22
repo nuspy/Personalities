@@ -7,6 +7,7 @@ produzione — sessione, pagina, evento firmato, attivazione — meno la carta.
 from __future__ import annotations
 
 import time
+import uuid
 
 import pytest
 from sqlalchemy import select
@@ -249,3 +250,69 @@ class TestProduzione:
 
         with pytest.raises(ValueError, match="sconosciuto"):
             provider_pagamenti(Settings(billing_provider="stripe"))
+
+
+class TestSenzaFornitore:
+    """`disattivato`: si va in produzione prima di aver scelto con chi incassare."""
+
+    def test_non_e_un_problema_in_produzione(self):
+        problemi = Settings(
+            environment="prod", database_url="postgresql+psycopg://x@db/p",
+            billing_provider="disattivato",
+        ).validate_production()
+        assert problemi == [], "senza fornitore il segreto dei webhook non firma niente"
+
+    async def test_un_piano_a_pagamento_risponde_503_e_non_lascia_sessioni(
+        self, client, piani, session, utente, monkeypatch,  # noqa: F811
+    ):
+        from platform_core.settings import get_settings
+
+        monkeypatch.setenv("PERSONA_BILLING_PROVIDER", "disattivato")
+        get_settings.cache_clear()
+        try:
+            r = await client.post("/me/checkout", json={"piano": "gold"})
+            gratis = await client.post("/me/subscription", json={"piano": "free"})
+        finally:
+            monkeypatch.undo()
+            get_settings.cache_clear()
+
+        assert r.status_code == 503
+        assert "non sono ancora attivi" in r.json()["detail"]
+        assert (await session.execute(
+            select(PaymentCheckout).where(PaymentCheckout.user_id == utente.id)
+        )).scalars().first() is None
+        assert gratis.status_code == 201, "il gratuito non passa da nessun pagamento"
+
+    async def test_nessun_evento_viene_accettato(self, client, piani, monkeypatch):  # noqa: F811
+        from platform_core.settings import get_settings
+
+        monkeypatch.setenv("PERSONA_BILLING_PROVIDER", "disattivato")
+        get_settings.cache_clear()
+        try:
+            r = await client.post("/billing/webhook", content=b"{}", headers={"X-Mock-Signature": "t=1,v1=x"})
+            pagina = await client.get(f"/billing/mock/checkout/{uuid.uuid4()}")
+        finally:
+            monkeypatch.undo()
+            get_settings.cache_clear()
+
+        assert r.status_code == 400
+        assert pagina.status_code == 404, "la pagina del simulatore esiste solo col simulatore"
+
+
+class TestAvvio:
+    async def test_in_produzione_una_configurazione_insicura_non_parte(self, monkeypatch):
+        """Prima si limitava a scriverlo nei log, e il servizio partiva lo
+        stesso — col pagamento simulato raggiungibile da chiunque."""
+        from platform_core.api.app import create_app, lifespan
+        from platform_core.settings import get_settings
+
+        monkeypatch.setenv("PERSONA_ENVIRONMENT", "prod")
+        monkeypatch.setenv("PERSONA_DATABASE_URL", "postgresql+psycopg://x@db/p")
+        get_settings.cache_clear()
+        try:
+            with pytest.raises(RuntimeError, match="simulato"):
+                async with lifespan(create_app()):
+                    pass
+        finally:
+            monkeypatch.undo()
+            get_settings.cache_clear()

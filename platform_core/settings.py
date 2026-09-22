@@ -73,9 +73,10 @@ class Settings(BaseSettings):
     tts_align_words: bool = True
 
     # --- pagamenti ---------------------------------------------------------
-    #: Chi incassa. Oggi solo `mock`: il fornitore vero non e' ancora scelto,
-    #: e il flusso — sessione, pagina ospitata, evento firmato — e' lo stesso
-    #: per tutti. In produzione `mock` e' rifiutato all'avvio.
+    #: Chi incassa: `mock` (il simulatore, per lo sviluppo) o `disattivato`
+    #: (nessuno: i piani a pagamento rispondono 503). Il fornitore vero non e'
+    #: ancora scelto, e il flusso — sessione, pagina ospitata, evento firmato —
+    #: e' lo stesso per tutti. In produzione `mock` impedisce l'avvio.
     billing_provider: str = "mock"
     #: Il segreto con cui il fornitore firma i suoi eventi.
     billing_webhook_secret: str = "segreto-di-sviluppo-da-cambiare"
@@ -174,9 +175,15 @@ class Settings(BaseSettings):
             if self.billing_provider == "mock":
                 problems.append(
                     "fornitore di pagamento simulato in produzione: chiunque "
-                    "potrebbe attivare qualunque piano senza pagare"
+                    "potrebbe attivare qualunque piano senza pagare. Finché un "
+                    "fornitore vero non c'è, PERSONA_BILLING_PROVIDER=disattivato"
                 )
-            if self.billing_webhook_secret == "segreto-di-sviluppo-da-cambiare":
+            # Senza fornitore non si accetta nessun evento, e il segreto non
+            # firma niente: pretenderlo costringerebbe a inventarne uno.
+            if (
+                self.billing_provider != "disattivato"
+                and self.billing_webhook_secret == "segreto-di-sviluppo-da-cambiare"
+            ):
                 problems.append(
                     "segreto dei webhook di pagamento lasciato al valore di "
                     "sviluppo: chiunque potrebbe firmare un pagamento finto"
