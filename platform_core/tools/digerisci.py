@@ -24,7 +24,8 @@ from ..domain.knowledge_models import Chunk, KnowledgeBase
 from ..domain.session import dispose_engine, get_session_factory
 from ..knowledge.digest_runner import DigestioneCorpus
 from ..knowledge.digestion import Digestore
-from ..llm.openai_compatible import OpenAICompatibleProvider
+from ..api.deps import provider_per
+from ..llm.compiti import Compito
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ logger = logging.getLogger(__name__)
 async def esegui(
     slug: str, *, chi: str, rifai: bool, lotto: int, campione: int,
 ) -> int:
-    provider = OpenAICompatibleProvider()
+    provider = provider_per(Compito.DIGESTIONE)
     factory = get_session_factory()
 
     async with factory() as session:

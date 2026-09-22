@@ -12,14 +12,15 @@ anche `from platform_core.domain.models import User` porta con sé tutto il
 resto: il vincolo è soddisfatto da qualunque strada si entri.
 """
 from . import (  # noqa: F401
-    avatar_models, base, billing_models, build_models, knowledge_models,
-    lab_models, memory_models, models,
+    avatar_models, base, billing_models, build_models, config_models,
+    knowledge_models, lab_models, memory_models, models,
 )
 
 from .avatar_models import Avatar
 from .base import Base, OwnedMixin, TimestampMixin, utcnow
 from .billing_models import CreditEntry, PaymentCheckout, PaymentEvent, Plan, Subscription
 from .build_models import Build, BuildEvent, RuntimeBinding
+from .config_models import ModelAssignment
 from .knowledge_models import (
     DIMENSIONI_EMBEDDING, AnswerTrace, Chunk, ChunkVector, Document,
     KnowledgeBase, Personality, PersonalityKnowledgeBase, PersonalityVersion,

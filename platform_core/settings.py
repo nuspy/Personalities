@@ -13,6 +13,8 @@ from typing import List, Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .llm.compiti import ModelloConfigurato
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -149,6 +151,20 @@ class Settings(BaseSettings):
     #: E' un timeout fra i token, non sulla durata totale: una risposta lunga e'
     #: legittima, un silenzio di due minuti no.
     llm_stream_timeout: float = 120.0
+
+    #: L'elenco dei modelli fra cui la console sceglie, uno per compito.
+    #: JSON: `[{"nome": "...", "provider": "...", "base_url": "...",
+    #: "model": "...", "api_key": "...", "senza_filtri": false}, ...]`.
+    #:
+    #: Sta qui e non nel database perche' un endpoint modificabile
+    #: dall'interfaccia e' traffico dirottabile verso una macchina qualunque,
+    #: con le chiavi appresso. La console sceglie fra questi nomi; non li
+    #: crea e non li modifica.
+    #:
+    #: Vuoto: se ne ricava uno solo dalle impostazioni `llm_*` qui sotto, e
+    #: tutti i compiti girano su quello. Un impianto che funzionava prima
+    #: continua a funzionare senza toccare nulla.
+    modelli: List["ModelloConfigurato"] = Field(default_factory=list)
 
     #: Quale fornitore genera le risposte: `openai-compatible` (OpenAI, LM
     #: Studio, vLLM, llama.cpp e affini) o `anthropic`.

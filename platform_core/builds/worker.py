@@ -52,14 +52,15 @@ FabbricaDigestione = Callable[["AsyncSession"], "DigestioneCorpus"]
 
 def _digestione_predefinita(session: "AsyncSession") -> "DigestioneCorpus":
     """Il classificatore vero. Importato qui perché tira dentro il provider."""
+    from ..api.deps import provider_per
     from ..knowledge.digest_runner import DigestioneCorpus
     from ..knowledge.digestion import Digestore
     from ..knowledge.embedding import OpenAICompatibleEmbedder
-    from ..llm.openai_compatible import OpenAICompatibleProvider
+    from ..llm.compiti import Compito
 
     return DigestioneCorpus(
         session,
-        Digestore(OpenAICompatibleProvider()),
+        Digestore(provider_per(Compito.DIGESTIONE)),
         embedder=OpenAICompatibleEmbedder(),
     )
 

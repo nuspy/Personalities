@@ -26,6 +26,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .base import utcnow
+from .config_models import ModelAssignment
 from .knowledge_models import (
     Chunk, CommercialCategory, Document, KnowledgeBase, Personality,
     PersonalityKnowledgeBase, PersonalityType, PersonalityTypeMap,
@@ -599,3 +600,57 @@ class AvatarRepository(_ConAudit):
         await self._session.delete(avatar)
         await self._session.flush()
         return quante
+
+
+class AssegnazioniModelliRepository(_ConAudit):
+    """Quale modello serve quale compito.
+
+    Scrive **solo il nome**: l'indirizzo e la chiave del modello stanno
+    nell'ambiente, e questa tabella non li conosce. È ciò che rende
+    innocuo dare a un amministratore il potere di cambiare assegnazione.
+    """
+
+    async def correnti(self) -> Dict[str, str]:
+        righe = (await self._session.execute(select(ModelAssignment))).scalars()
+        return {r.task: r.model_name for r in righe}
+
+    async def assegna(self, compito: str, modello: Optional[str]) -> None:
+        """Assegna un modello a un compito, o toglie l'assegnazione.
+
+        `None` cancella la riga invece di scrivere il nome del predefinito:
+        un compito senza riga *ricade* sul predefinito e continua a seguirlo
+        se un giorno cambia, mentre un nome scritto resterebbe quello.
+        """
+        riga = await self._session.get(ModelAssignment, compito)
+        prima = {"modello": riga.model_name} if riga else None
+
+        if modello is None:
+            if riga is not None:
+                await self._session.delete(riga)
+            dopo = None
+        else:
+            if riga is None:
+                riga = ModelAssignment(task=compito, model_name=modello)
+                self._session.add(riga)
+            else:
+                riga.model_name = modello
+            riga.updated_by = self._contesto.attore.id
+            dopo = {"modello": modello}
+
+        if prima == dopo:
+            return
+
+        await self._registra(
+            "modello.assegna", tipo="compito", target_id=compito,
+            prima=prima, dopo=dopo,
+        )
+
+
+async def assegnazioni_correnti(session: AsyncSession) -> Dict[str, str]:
+    """Le assegnazioni, senza contesto amministrativo.
+
+    Serve a chi legge e basta: l'API a ogni rinfresco, il worker all'inizio
+    di un lavoro. Il repository con l'audit serve a chi scrive.
+    """
+    righe = (await session.execute(select(ModelAssignment))).scalars()
+    return {r.task: r.model_name for r in righe}

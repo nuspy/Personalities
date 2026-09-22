@@ -33,7 +33,11 @@ from ...billing.entitlements import puo_parlare_con
 from ...billing.plans import GestoreAbbonamenti
 from ...billing.quote import ContatoreQuote, QuotaSuperata
 from ...billing.tariffe import costo_risposta
-from ...api.deps import get_embedder, get_guardrail, get_llm_provider
+from ...api.deps import (
+    aggiorna_assegnazioni, get_embedder, get_guardrail, get_llm_provider,
+    provider_per,
+)
+from ...llm.compiti import Compito
 from ...domain.knowledge_models import CommercialCategory, Personality, PersonalityVersion
 from ...domain.lab_models import AnswerFeedback
 from ...lab.esperimenti import GestoreEsperimenti
@@ -129,6 +133,14 @@ async def chat(
     guardrail: Annotated[RegistroGuardrail, Depends(get_guardrail)],
 ) -> StreamingResponse:
     """Manda un messaggio e ricevi la risposta mentre viene generata."""
+    # Chi serve quale compito può essere cambiato dalla console, e su
+    # un'altra replica: il registro si rilegge da sé con una scadenza breve.
+    # Qui e non prima perché serve una sessione; il modello della
+    # conversazione è già stato risolto dalle dipendenze, quindi un cambio
+    # vale dalla richiesta successiva — il giudice, risolto più sotto, lo
+    # segue subito.
+    await aggiorna_assegnazioni(session)
+
     repo = ConversationRepository(session)
     personalita_repo = PersonalityRepository(session)
 
@@ -479,7 +491,10 @@ async def chat(
         # verifica alla prima lamentela sulla lentezza. Il verdetto arriva
         # quando arriva, e il client aggiorna la nota sotto la risposta.
         if livello_verifica == "nli" and risposta.strip() and passaggi:
-            esito = await Giudice(provider).valuta(
+            # Il giudice del compito «giudizio», che di norma è un modello
+            # diverso da quello che ha appena risposto: un giudice che è
+            # anche l'autore assolve sé stesso.
+            esito = await Giudice(provider_per(Compito.GIUDIZIO)).valuta(
                 risposta, passaggi, rubriche=rubriche,
             )
             yield sse("verifica", {

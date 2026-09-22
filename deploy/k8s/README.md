@@ -116,6 +116,29 @@ Dopo il primo avvio: il catalogo dei piani (`python -m platform_core.tools.seed_
 in un pod dell'API) e il primo amministratore in Keycloak, che al primo accesso
 configura l'OTP.
 
+## Quale modello serve quale compito
+
+Quattro compiti, ciascuno con requisiti diversi: **conversazione** (le
+risposte agli utenti), **digestione** (classificare i corpora ed estrarre le
+memorie), **recupero** (costruire le domande al corpus e rielaborare i
+passaggi), **giudizio** (verificare che le affermazioni stiano nei passaggi).
+
+Il giudizio merita un modello diverso da quello della conversazione: un
+giudice che è anche l'autore assolve sé stesso.
+
+I modelli si elencano in `PERSONA_MODELLI` (vedi `segreti.env.example`) e la
+console, in *Modelli*, sceglie fra quei nomi. **L'elenco non si cambia dalla
+console**: indirizzi e chiavi restano nella configurazione, perché un endpoint
+modificabile dall'interfaccia è traffico dirottabile verso una macchina
+qualunque. Un compito senza scelta ricade sul modello chiamato `predefinito`;
+senza elenco, se ne ricava uno dalle vecchie `PERSONA_LLM_*` e tutto continua
+a funzionare come prima.
+
+Un modello dichiarato `senza_filtri` — un «abliterato», che per costruzione
+non rifiuta nulla — può essere assegnato a qualunque compito, comprese le
+risposte agli utenti: decide l'amministratore. La console lo dichiara accanto
+al nome, e il registro di audit conserva chi ha scelto cosa.
+
 ## Accensione del motore locale
 
 Un modello su GPU occupa la scheda anche mentre nessuno lo interroga. Il

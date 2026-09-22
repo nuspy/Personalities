@@ -191,8 +191,12 @@ async def estrai_memorie(*, limite: int = 20, provider=None, embedder=None) -> E
 
     esito = EsitoPassata()
     if provider is None:
-        from ..api.deps import get_llm_provider
-        provider = get_llm_provider()
+        from ..api.deps import provider_per
+        from ..llm.compiti import Compito
+
+        # Leggere una conversazione chiusa e ricavarne memorie è lavoro di
+        # fondo come la digestione di un corpus, e ne condivide il modello.
+        provider = provider_per(Compito.DIGESTIONE)
     if embedder is None:
         from ..api.deps import get_embedder
         embedder = get_embedder()

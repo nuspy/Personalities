@@ -10,6 +10,7 @@ const SEZIONI = [
   { href: "/corpora", etichetta: "Corpora" },
   { href: "/digestione", etichetta: "Digestione" },
   { href: "/avatar", etichetta: "Avatar" },
+  { href: "/modelli", etichetta: "Modelli" },
   { href: "/prove", etichetta: "Prove" },
   { href: "/esperimenti", etichetta: "Esperimenti" },
   { href: "/analisi", etichetta: "Analisi" },

@@ -1,0 +1,107 @@
+/* I compiti e i modelli che li servono.
+ *
+ * Quattro schede affiancate su schermo largo, una colonna sullo stretto: il
+ * confronto fra i quattro è il motivo per cui si apre questa pagina, e su un
+ * telefono si fa scorrendo.
+ */
+
+.compiti {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.scheda {
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  background: var(--superficie);
+  padding: 1rem 1.1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.schedaTitolo {
+  font-family: var(--interfaccia);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--inchiostro);
+}
+
+.schedaNota {
+  margin: 0.4rem 0 0.9rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--inchiostro-debole);
+  /* Spinge la scelta in fondo, così i menu delle quattro schede restano
+     allineati anche con descrizioni di lunghezza diversa. */
+  flex: 1;
+}
+
+.etichetta {
+  font-family: var(--apparato);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--inchiostro-debole);
+  margin-bottom: 0.3rem;
+}
+
+.scelta {
+  /* 48 px: su un telefono un bersaglio più piccolo si manca. */
+  min-height: 48px;
+  width: 100%;
+  padding: 0 0.6rem;
+  font-family: var(--interfaccia);
+  font-size: 0.9rem;
+  color: var(--inchiostro);
+  background: var(--superficie-alta);
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+}
+
+.scelta:focus-visible {
+  outline: 2px solid var(--rubrica);
+  outline-offset: 2px;
+}
+
+.scelta:disabled {
+  opacity: 0.5;
+}
+
+.inUso {
+  margin: 0.6rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--inchiostro-tenue);
+}
+
+/* Un dato di fatto, non un divieto: decide l'amministratore. Colorato perché
+   si noti, scritto a parole perché il colore da solo non dice niente a chi
+   non lo distingue. */
+.avviso {
+  color: var(--rubrica);
+  font-size: 0.78rem;
+}
+
+.disponibili {
+  border-top: 1px solid var(--filo-tenue);
+  padding-top: 1.5rem;
+}
+
+.disponibiliTitolo {
+  font-family: var(--interfaccia);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--inchiostro);
+}
+
+.disponibiliNota {
+  margin: 0.4rem 0 1rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  max-width: 62ch;
+  color: var(--inchiostro-debole);
+}

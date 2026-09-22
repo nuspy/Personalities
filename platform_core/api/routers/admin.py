@@ -669,6 +669,99 @@ async def opzioni_di_realizzazione(
     }
 
 
+# --- modelli e compiti -----------------------------------------------------
+
+
+class AssegnaModello(BaseModel):
+    #: `None` toglie l'assegnazione e fa ricadere il compito sul predefinito.
+    modello: Optional[str] = Field(default=None, max_length=60)
+
+
+@router.get("/modelli")
+async def modelli_e_compiti(session: DbSession) -> Dict[str, Any]:
+    """L'elenco dei modelli configurati e chi serve quale compito.
+
+    L'elenco è di sola lettura, e non per pigrizia: indirizzi e chiavi
+    stanno nell'ambiente perché un endpoint modificabile dall'interfaccia è
+    traffico dirottabile verso una macchina qualunque, con le chiavi
+    appresso. Qui si sceglie fra nomi già approvati.
+    """
+    from ..deps import aggiorna_assegnazioni, get_registro_modelli
+
+    await aggiorna_assegnazioni(session)
+    registro = get_registro_modelli()
+
+    return {
+        "modelli": [
+            {
+                "nome": m.nome,
+                "provider": m.provider,
+                "model": m.model,
+                "descrizione": m.descrizione,
+                "senza_filtri": m.senza_filtri,
+                # L'indirizzo senza credenziali: serve a distinguere due
+                # modelli con nomi simili, non a ricostruire la
+                # configurazione. La chiave non esce di qui in nessun caso.
+                "dove": _dominio(m.base_url),
+            }
+            for m in registro.modelli
+        ],
+        "compiti": registro.stato(),
+    }
+
+
+@router.put("/modelli/{compito}")
+async def assegna_modello(
+    compito: str, corpo: AssegnaModello, session: DbSession, ctx: Contesto,
+) -> Dict[str, Any]:
+    """Assegna un modello a un compito."""
+    from ...domain.admin_repositories import AssegnazioniModelliRepository
+    from ...llm.compiti import Compito
+    from ..deps import aggiorna_assegnazioni, get_registro_modelli
+
+    try:
+        quale = Compito(compito)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Compito sconosciuto: {compito}",
+        ) from None
+
+    registro = get_registro_modelli()
+    if corpo.modello is not None and not registro.esiste(corpo.modello):
+        # 409 e non 400: la richiesta è ben formata, è l'elenco dei modelli a
+        # non contenere quel nome — e il motivo dice cosa fare.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"«{corpo.modello}» non è fra i modelli configurati. "
+                "L'elenco si cambia in PERSONA_MODELLI, non da qui."
+            ),
+        )
+
+    await AssegnazioniModelliRepository(session, ctx).assegna(
+        quale.value, corpo.modello,
+    )
+    await session.commit()
+
+    # Riletto subito, senza attendere la scadenza: chi ha appena scelto
+    # deve vedere l'effetto, non la configurazione di prima con la promessa
+    # che fra mezzo minuto cambierà. Le altre repliche ci arrivano da sé.
+    await aggiorna_assegnazioni(session, forza=True)
+
+    return {"compito": quale.value, "in_uso": registro.nome_per(quale)}
+
+
+def _dominio(base_url: str) -> str:
+    """Host e porta di un indirizzo, senza schema, percorso né credenziali."""
+    from urllib.parse import urlsplit
+
+    if not base_url:
+        return ""
+    pezzi = urlsplit(base_url)
+    return pezzi.netloc.rsplit("@", 1)[-1] or base_url
+
+
 # --- motore locale ---------------------------------------------------------
 
 

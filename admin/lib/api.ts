@@ -707,3 +707,43 @@ export const comandaMotore = (t: string, azione: "accendi" | "spegni") =>
     method: "POST",
     body: JSON.stringify({ azione }),
   });
+
+/* --- i modelli e i compiti --------------------------------------------- */
+
+export interface ModelloConfigurato {
+  nome: string;
+  provider: string;
+  model: string;
+  descrizione: string;
+  senza_filtri: boolean;
+  /* Host e porta, senza schema né credenziali: serve a distinguere due
+   * modelli con nomi simili, non a ricostruire la configurazione. */
+  dove: string;
+}
+
+export interface CompitoAssegnato {
+  compito: string;
+  label: string;
+  descrizione: string;
+  /* Il nome scelto, o `null` quando il compito ricade sul predefinito. Le
+   * due cose si comportano uguale oggi e diversamente domani, quando il
+   * predefinito cambia: per questo restano distinte. */
+  assegnato: string | null;
+  in_uso: string;
+  senza_filtri: boolean;
+}
+
+export const modelliECompiti = (t: string) =>
+  chiamata<{ modelli: ModelloConfigurato[]; compiti: CompitoAssegnato[] }>(
+    t, "/admin/modelli",
+  );
+
+export const assegnaModello = (
+  t: string,
+  compito: string,
+  modello: string | null,
+) =>
+  chiamata<{ compito: string; in_uso: string }>(t, `/admin/modelli/${compito}`, {
+    method: "PUT",
+    body: JSON.stringify({ modello }),
+  });

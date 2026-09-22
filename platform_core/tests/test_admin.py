@@ -535,3 +535,103 @@ class TestMotoreLocale:
         risposta = await admin.post("/admin/motore", json={"azione": "riavvia-tutto"})
 
         assert risposta.status_code == 422
+
+
+class TestModelliECompiti:
+    """La console sceglie fra nomi approvati, non inventa endpoint."""
+
+    @pytest.fixture(autouse=True)
+    def elenco(self, monkeypatch):
+        from platform_core.api.deps import get_registro_modelli
+        from platform_core.llm.compiti import ModelloConfigurato, RegistroModelli
+
+        registro = RegistroModelli([
+            ModelloConfigurato(
+                nome="predefinito", base_url="http://127.0.0.1:9/v1",
+                api_key="questa-non-deve-uscire",
+            ),
+            ModelloConfigurato(
+                nome="bonsai", base_url="http://127.0.0.1:7707/v1",
+                senza_filtri=True,
+            ),
+        ])
+        get_registro_modelli.cache_clear()
+        monkeypatch.setattr(
+            "platform_core.api.deps.get_registro_modelli", lambda: registro,
+        )
+        yield registro
+        get_registro_modelli.cache_clear()
+
+    async def test_l_elenco_non_porta_fuori_le_chiavi(self, admin):
+        risposta = await admin.get("/admin/modelli")
+
+        assert risposta.status_code == 200
+        assert "questa-non-deve-uscire" not in risposta.text
+        nomi = [m["nome"] for m in risposta.json()["modelli"]]
+        assert nomi == ["predefinito", "bonsai"]
+
+    async def test_i_quattro_compiti_sono_tutti_elencati(self, admin):
+        compiti = (await admin.get("/admin/modelli")).json()["compiti"]
+
+        assert {c["compito"] for c in compiti} == {
+            "conversazione", "digestione", "recupero", "giudizio",
+        }
+
+    async def test_assegnare_cambia_chi_serve_il_compito(self, admin, elenco):
+        risposta = await admin.put(
+            "/admin/modelli/digestione", json={"modello": "bonsai"},
+        )
+
+        assert risposta.status_code == 200
+        assert risposta.json()["in_uso"] == "bonsai"
+
+        compiti = {
+            c["compito"]: c
+            for c in (await admin.get("/admin/modelli")).json()["compiti"]
+        }
+        assert compiti["digestione"]["in_uso"] == "bonsai"
+        assert compiti["conversazione"]["in_uso"] == "predefinito"
+
+    async def test_un_modello_senza_filtri_alla_chat_e_permesso(self, admin):
+        """Decide l'amministratore: la console lo dichiara, non lo impedisce."""
+        risposta = await admin.put(
+            "/admin/modelli/conversazione", json={"modello": "bonsai"},
+        )
+
+        assert risposta.status_code == 200
+        compiti = {
+            c["compito"]: c
+            for c in (await admin.get("/admin/modelli")).json()["compiti"]
+        }
+        assert compiti["conversazione"]["senza_filtri"] is True
+
+    async def test_un_modello_fuori_elenco_viene_rifiutato(self, admin):
+        risposta = await admin.put(
+            "/admin/modelli/giudizio", json={"modello": "http://macchina-mia/v1"},
+        )
+
+        assert risposta.status_code == 409
+        assert "PERSONA_MODELLI" in risposta.json()["detail"]
+
+    async def test_un_compito_inventato_e_un_404(self, admin):
+        risposta = await admin.put(
+            "/admin/modelli/qualcosaltro", json={"modello": "bonsai"},
+        )
+
+        assert risposta.status_code == 404
+
+    async def test_togliere_l_assegnazione_riporta_al_predefinito(self, admin):
+        await admin.put("/admin/modelli/recupero", json={"modello": "bonsai"})
+        risposta = await admin.put("/admin/modelli/recupero", json={"modello": None})
+
+        assert risposta.json()["in_uso"] == "predefinito"
+
+    async def test_chi_ha_cambiato_resta_scritto(self, admin, session):
+        from platform_core.domain.admin_repositories import RegistroAuditRepository
+
+        await admin.put("/admin/modelli/giudizio", json={"modello": "bonsai"})
+
+        voci = await RegistroAuditRepository(session).recenti(azione="modello.assegna")
+        assert len(voci) == 1
+        assert voci[0].target_id == "giudizio"
+        assert voci[0].after == {"modello": "bonsai"}

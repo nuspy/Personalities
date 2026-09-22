@@ -58,26 +58,72 @@ def get_capability_registry() -> CapabilityRegistry:
 
 
 @lru_cache(maxsize=1)
-def get_llm_provider():
-    """Il fornitore di generazione, condiviso fra le richieste.
+def get_registro_modelli():
+    """L'elenco dei modelli e chi serve quale compito.
 
-    Condiviso e non creato ogni volta: l'oggetto ricorda quale modello il
-    server ha caricato, e costruirne uno nuovo a ogni domanda significa
+    In cache come i fornitori che contiene: l'oggetto ricorda quale modello
+    ciascun server ha caricato, e ricostruirlo a ogni domanda significherebbe
     chiedere di nuovo l'elenco dei modelli prima di ogni singola risposta —
     una chiamata di rete in piu' sul percorso piu' sensibile alla latenza che
-    ci sia. Non tiene connessioni aperte: il client HTTP nasce e muore dentro
-    ciascuna generazione.
+    ci sia.
+
+    Le assegnazioni le carica chi ha una sessione di database
+    (`aggiorna_assegnazioni`): qui non se ne apre una, perche' questa
+    funzione viene chiamata anche dal worker e dagli strumenti da riga di
+    comando, dove un accesso al database all'import sarebbe una sorpresa.
     """
-    from ..settings import get_settings
+    from ..llm.compiti import RegistroModelli, modelli_da_impostazioni
 
-    if get_settings().llm_provider == "anthropic":
-        from ..llm.anthropic import AnthropicProvider
+    return RegistroModelli(modelli_da_impostazioni())
 
-        return AnthropicProvider()
 
-    from ..llm.openai_compatible import OpenAICompatibleProvider
+def get_llm_provider():
+    """Il fornitore che risponde agli utenti.
 
-    return OpenAICompatibleProvider()
+    Resta con questo nome perche' e' quello che gli endpoint di chat
+    chiedono, ed e' il compito piu' ovvio: «il modello», senza aggettivi, e'
+    quello che parla.
+    """
+    from ..llm.compiti import Compito
+
+    return get_registro_modelli().per(Compito.CONVERSAZIONE)
+
+
+def provider_per(compito) -> object:
+    """Il fornitore di un compito qualunque."""
+    return get_registro_modelli().per(compito)
+
+
+async def aggiorna_assegnazioni(session, *, forza: bool = False) -> None:
+    """Rilegge dal database chi serve quale compito, se e' ora.
+
+    Con piu' repliche dell'API una modifica fatta su una non arriva alle
+    altre da sola, e nessuna se ne accorgerebbe: il registro ha una scadenza
+    breve e si rinfresca da se'. Un errore qui non ferma la richiesta —
+    l'assegnazione di prima e' vecchia di mezzo minuto, non sbagliata.
+    """
+    from ..domain.admin_repositories import assegnazioni_correnti
+    from ..llm.compiti import Compito
+
+    registro = get_registro_modelli()
+    if not forza and not registro.da_rileggere():
+        return
+
+    try:
+        righe = await assegnazioni_correnti(session)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Assegnazioni dei modelli non rilette: si continua con quelle "
+            "in memoria", exc_info=True,
+        )
+        return
+
+    valide = {}
+    for compito in Compito:
+        nome = righe.get(compito.value)
+        if nome:
+            valide[compito] = nome
+    registro.aggiorna(valide)
 
 
 @lru_cache(maxsize=1)
@@ -112,7 +158,7 @@ def reset_dependencies() -> None:
     """Dimentica le istanze memorizzate. Solo per i test."""
     get_key_value_store.cache_clear()
     get_capability_registry.cache_clear()
-    get_llm_provider.cache_clear()
+    get_registro_modelli.cache_clear()
     get_embedder.cache_clear()
     get_guardrail.cache_clear()
 
