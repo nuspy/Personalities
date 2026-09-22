@@ -138,13 +138,18 @@ spec:
             # sembra funzionare e non funziona.
             - name: SEARXNG_ENDPOINT
               value: http://searxng:8080
-            # **Uno, non quattro.** Il container avvia un processo Node per
-            # worker più quattro di servizio, e ciascuno parte da due o
-            # trecento megabyte: con quattro worker erano dieci processi, e
-            # il container moriva per esaurimento della memoria tre secondi
-            # dopo l'avvio — un OOMKilled che nei log somiglia a un crash
-            # dell'applicazione. Una ricerca ogni tanto non ha bisogno di
-            # parallelismo; si alza insieme al limite di memoria qui sotto.
+            # **La variabile che conta è questa.** Il container avvia un
+            # processo Node per worker, quattrocento megabyte l'uno, e il
+            # valore predefinito è cinque: undici processi in tutto, tre giga
+            # e mezzo, e con un limite più basso muore per esaurimento di
+            # memoria tre secondi dopo l'avvio — un OOMKilled che nei log
+            # somiglia a un crash dell'applicazione.
+            #
+            # `NUM_WORKERS_PER_QUEUE` **non** li tocca, checché suggerisca il
+            # nome: abbassata da sola, ne partivano cinque lo stesso. Con
+            # NUQ_WORKER_COUNT a uno: sette processi, un giga e nove.
+            - name: NUQ_WORKER_COUNT
+              value: "1"
             - name: NUM_WORKERS_PER_QUEUE
               value: "1"
             - name: CRAWL_CONCURRENT_REQUESTS
@@ -168,10 +173,11 @@ spec:
             initialDelaySeconds: 90
             periodSeconds: 30
           resources:
-            # Misurato: con un worker si assesta sotto il giga e mezzo, e
-            # sotto i due muore all'avvio.
-            requests: {cpu: 300m, memory: 768Mi}
-            limits: {memory: 4Gi}
+            # Misurato con NUQ_WORKER_COUNT=1: un giga e nove a riposo. Il
+            # limite lascia margine per una pagina grossa — una ricerca ha
+            # restituito un PDF da un milione di caratteri.
+            requests: {cpu: 300m, memory: 1Gi}
+            limits: {memory: 3Gi}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: {drop: [ALL]}

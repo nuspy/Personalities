@@ -222,8 +222,10 @@ services:
       POSTGRES_DB: postgres
       # Chi trova gli indirizzi che poi Firecrawl va a prendere.
       SEARXNG_ENDPOINT: http://searxng:8080
-      # Uno: il container avvia un processo Node per worker più quattro di
-      # servizio, e ciascuno parte da due o trecento megabyte.
+      # Il numero di processi Node che il container avvia. **La variabile
+      # che conta è NUQ_WORKER_COUNT**: NUM_WORKERS_PER_QUEUE non li tocca,
+      # e ne partono cinque comunque — quattrocento megabyte l'uno.
+      NUQ_WORKER_COUNT: "1"
       NUM_WORKERS_PER_QUEUE: "1"
       CRAWL_CONCURRENT_REQUESTS: "4"
       MAX_CONCURRENT_JOBS: "2"

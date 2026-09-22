@@ -214,12 +214,19 @@ servizio di terze parti che nessuno ha deciso di aggiornare. Per aggiornare:
 `docker manifest inspect -v ghcr.io/firecrawl/firecrawl:latest` e si sostituisce
 il digest in `deploy/k8s/ricerca/`.
 
-Due misure trovate provandolo, e non deducibili: Firecrawl avvia **un processo
-Node per worker** più quattro di servizio, e con quattro worker moriva per
-esaurimento della memoria tre secondi dopo l'avvio — `NUM_WORKERS_PER_QUEUE=1`
-e quattro giga di limite; Redis e RabbitMQ partono da root e **scendono** al
-proprio utente, cosa che `capabilities: drop: [ALL]` impedisce, quindi partono
-già come l'utente giusto (`runAsUser` 999 e 100).
+Due misure trovate provandolo, e non deducibili dai manifesti.
+
+**Il numero di processi.** Firecrawl avvia un processo Node per worker,
+quattrocento megabyte l'uno, e di worker ne fa cinque: undici processi, tre
+giga e mezzo, e sotto quel limite muore per esaurimento di memoria tre secondi
+dopo l'avvio — un OOMKilled che nei log somiglia a un crash suo. La variabile
+che li governa è `NUQ_WORKER_COUNT`; `NUM_WORKERS_PER_QUEUE` **non li tocca**,
+checché suggerisca il nome. A uno: sette processi, un giga e nove.
+
+**L'utente.** Redis e RabbitMQ partono da root e *scendono* al proprio utente
+con `setpriv` e `su-exec`: `capabilities: drop: [ALL]` glielo impedisce, e il
+container muore prima di poter dire perché. Partono già come l'utente giusto
+(`runAsUser` 999 e 100), che è anche più pulito.
 
 Spenta (`PERSONA_RICERCA_PROVIDER=disattivata`, o togliendo il componente),
 una voce che chiede la ricerca risponde lo stesso con il corpus che ha, e la
