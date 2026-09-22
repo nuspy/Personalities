@@ -9,11 +9,13 @@ import {
   ErroreApi,
   leggiCapacita,
   leggiConto,
+  leggiCreazioni,
   leggiMessaggi,
   type CapacitaPiattaforma,
   type Conto,
   type Consumo,
   type Fonte,
+  type Menzioni,
   type Personalita,
   type Verifica,
 } from "@/lib/api";
@@ -40,6 +42,7 @@ interface Turno {
   verifica?: Verifica;
   /** Arriva a risposta salvata: senza, non c'è niente da votare. */
   messageId?: string;
+  menzioni?: Menzioni;
   voto?: number | null;
 }
 
@@ -261,18 +264,31 @@ function Conversazione() {
   const campo = useRef<HTMLTextAreaElement>(null);
   const interruttore = useRef<AbortController | null>(null);
 
+  const token = auth.user?.access_token ?? null;
+
   useEffect(() => {
     elencaPersonalita()
       .then((elenco) => {
         setPersonalita(elenco);
         /* Se ce n'è una sola, si sceglie da sé: un menu con un'opzione è una
-         * domanda a cui esiste una risposta sola. */
-        if (elenco.length === 1) setScelta(elenco[0].slug);
+         * domanda a cui esiste una risposta sola. Non se una scelta c'è già —
+         * dall'indirizzo, per una voce propria — o la si sovrascriverebbe. */
+        if (elenco.length === 1) setScelta((s) => s ?? elenco[0].slug);
       })
       .catch(() => setPersonalita([]));
   }, []);
 
-  const token = auth.user?.access_token ?? null;
+  /* Le voci proprie, private: non stanno nel catalogo, e si aggiungono al
+   * menu solo per chi le ha create. */
+  const [proprie, setProprie] = useState<Personalita[]>([]);
+  useEffect(() => {
+    if (!token) return;
+    leggiCreazioni(token)
+      .then((c) =>
+        setProprie(c.personalita.map((p) => ({ slug: p.slug, display_name: p.nome, description: p.descrizione }))),
+      )
+      .catch(() => setProprie([]));
+  }, [token]);
 
   /* Il conto si rilegge a ogni turno finito: una risposta consuma crediti, e
    * un saldo fermo al valore di dieci minuti fa è peggio di nessun saldo —
@@ -386,6 +402,9 @@ function Conversazione() {
           case "fonti":
             aggiornaUltimo((t) => ({ ...t, fonti: evento.fonti }));
             break;
+          case "menzioni":
+            aggiornaUltimo((t) => ({ ...t, menzioni: evento.menzioni }));
+            break;
           case "pensa":
             setPensa(true);
             break;
@@ -435,7 +454,7 @@ function Conversazione() {
   }, [auth, aggiornaConto, bozza, conversationId, inCorso, scelta]);
 
   const nomeScelta =
-    personalita.find((p) => p.slug === scelta)?.display_name ?? null;
+    [...personalita, ...proprie].find((p) => p.slug === scelta)?.display_name ?? null;
 
   return (
     <div className={stili.pagina}>
@@ -446,7 +465,7 @@ function Conversazione() {
 
         <LinkSezioni />
 
-        {personalita.length > 1 && (
+        {personalita.length + proprie.length > 1 && (
           <select
             className={stili.scelta}
             value={scelta ?? ""}
@@ -458,11 +477,26 @@ function Conversazione() {
             aria-label="Con chi parlare"
           >
             <option value="">Nessuna personalità</option>
-            {personalita.map((p) => (
-              <option key={p.slug} value={p.slug}>
-                {p.display_name}
-              </option>
-            ))}
+            {proprie.length > 0 ? (
+              <>
+                <optgroup label="Catalogo">
+                  {personalita.map((p) => (
+                    <option key={p.slug} value={p.slug}>{p.display_name}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Le tue">
+                  {proprie.map((p) => (
+                    <option key={p.slug} value={p.slug}>{p.display_name}</option>
+                  ))}
+                </optgroup>
+              </>
+            ) : (
+              personalita.map((p) => (
+                <option key={p.slug} value={p.slug}>
+                  {p.display_name}
+                </option>
+              ))
+            )}
           </select>
         )}
 
@@ -609,7 +643,7 @@ function Soglia({
       </h1>
       <p className={stili.sogliaTesto}>
         {personalita
-          ? "Le risposte nascono dal suo corpus. A margine trovi i passaggi da cui vengono."
+          ? "Le risposte nascono dal suo corpus. A margine trovi i passaggi da cui vengono. Scrivi @ e il nome di un'altra voce per chiamarla in causa."
           : "Il modello risponde con la propria voce: scegli una personalità per ancorare le risposte a un corpus."}
       </p>
       <p className={stili.nota}>
@@ -697,6 +731,7 @@ function Riga({
             )}
           </div>
         )}
+        {turno.menzioni && <NotaMenzioni menzioni={turno.menzioni} />}
         {pensa && !turno.testo && (
           <p className={stili.pensa}>sta ragionando…</p>
         )}
@@ -751,6 +786,24 @@ function Verdetto({ verifica }: { verifica: Verifica }) {
   );
 }
 
+/* Chi è stato chiamato in causa con `@Nome`, e chi no.
+ *
+ * Una menzione ignorata in silenzio sembra un difetto; rifiutata col motivo è
+ * un'informazione — e dice a chi scrive che cosa cambierebbe col piano. */
+function NotaMenzioni({ menzioni }: { menzioni: Menzioni }) {
+  if (!menzioni.incluse.length && !menzioni.escluse.length) return null;
+  return (
+    <p className={stili.menzioni}>
+      {menzioni.incluse.length > 0 && (
+        <>Chiamat{menzioni.incluse.length === 1 ? "a" : "e"} in causa: {menzioni.incluse.map((m) => m.nome).join(", ")}. </>
+      )}
+      {menzioni.escluse.map((e) => (
+        <span key={e.nome}>{e.nome} no: {e.motivo}. </span>
+      ))}
+    </p>
+  );
+}
+
 function Apparato({ fonti }: { fonti: Fonte[] }) {
   return (
     <ul className={stili.apparato}>
@@ -762,7 +815,10 @@ function Apparato({ fonti }: { fonti: Fonte[] }) {
           >
             {f.etichetta}
           </abbr>{" "}
-          <span className={stili.fonte}>{f.documento}</span>
+          <span className={stili.fonte}>
+            {f.voce && <span className={stili.fonteVoce}>di {f.voce} · </span>}
+            {f.documento}
+          </span>
         </li>
       ))}
     </ul>

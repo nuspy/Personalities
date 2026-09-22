@@ -38,6 +38,13 @@ export interface Fonte {
   sezione: string | null;
   uri: string | null;
   estratto: string;
+  /** Quando il passaggio viene da un'altra voce chiamata con `@Nome`. */
+  voce?: string | null;
+}
+
+export interface Menzioni {
+  incluse: { slug: string; nome: string }[];
+  escluse: { nome: string; motivo: string }[];
 }
 
 export interface Personalita {
@@ -57,6 +64,7 @@ export interface Verifica {
 export type EventoChat =
   | { tipo: "inizio"; conversationId: string; correlationId: string; personalita: string | null }
   | { tipo: "fonti"; fonti: Fonte[] }
+  | { tipo: "menzioni"; menzioni: Menzioni }
   | { tipo: "token"; testo: string }
   | { tipo: "pensa" }
   | { tipo: "degradato"; motivo: string }
@@ -231,6 +239,8 @@ function interpreta(blocco: string): EventoChat | null {
       };
     case "sources":
       return { tipo: "fonti", fonti: (corpo.passaggi as Fonte[]) ?? [] };
+    case "menzioni":
+      return { tipo: "menzioni", menzioni: corpo as unknown as Menzioni };
     case "degradato":
       return { tipo: "degradato", motivo: String(corpo.motivo) };
     case "token":
@@ -510,4 +520,126 @@ export async function trascriviRegistrazione(
   return leggi(await fetch(`${API}/voice/listen`, {
     method: "POST", headers: { Authorization: `Bearer ${token}` }, body: modulo,
   }));
+}
+
+/* ---- personalità e corpora propri ---- */
+
+export interface PersonalitaPropria {
+  id: string;
+  slug: string;
+  nome: string;
+  descrizione: string | null;
+  versione: number | null;
+  prompt: string;
+  corpora: string[];
+}
+
+export interface CorpusProprio {
+  id: string;
+  nome: string;
+  documenti: number;
+  passaggi: number;
+}
+
+export interface Creazioni {
+  permessi: {
+    corpora_propri: boolean;
+    /** `null`: senza limite. */
+    personalita_proprie: number | null;
+    personalita_usate: number;
+  };
+  personalita: PersonalitaPropria[];
+  corpora: CorpusProprio[];
+}
+
+export interface DocumentoProprio {
+  id: string;
+  titolo: string;
+  file: string | null;
+  registro: string | null;
+  passaggi: number;
+}
+
+export interface Lavoro {
+  id: string;
+  stato: "in_coda" | "in_corso" | "riuscita" | "fallita" | "annullata";
+  avanzamento: number;
+  messaggio: string | null;
+  errore: string | null;
+  esito: {
+    documenti: number;
+    passaggi: number;
+    saltati: { nome: string; motivo: string }[];
+    falliti: { nome: string; motivo: string }[];
+  } | null;
+}
+
+export async function leggiCreazioni(token: string): Promise<Creazioni> {
+  return leggi(await fetch(`${API}/me/creations`, { headers: intestazioni(token) }));
+}
+
+export async function formatiCaricabili(
+  token: string,
+): Promise<{ formati: Record<string, string>; byte_massimi: number; file_massimi: number }> {
+  return leggi(await fetch(`${API}/me/ingestion/formats`, { headers: intestazioni(token) }));
+}
+
+export async function creaPersonalitaPropria(
+  token: string, corpo: { nome: string; descrizione?: string; prompt: string },
+): Promise<PersonalitaPropria> {
+  return leggi(await fetch(`${API}/me/personalities`, {
+    method: "POST", headers: intestazioni(token), body: JSON.stringify(corpo),
+  }));
+}
+
+export async function modificaPersonalitaPropria(
+  token: string, id: string, corpo: { nome?: string; descrizione?: string; prompt?: string },
+): Promise<PersonalitaPropria> {
+  return leggi(await fetch(`${API}/me/personalities/${id}`, {
+    method: "PUT", headers: intestazioni(token), body: JSON.stringify(corpo),
+  }));
+}
+
+export async function archiviaPersonalitaPropria(token: string, id: string): Promise<unknown> {
+  return leggi(await fetch(`${API}/me/personalities/${id}`, {
+    method: "DELETE", headers: intestazioni(token),
+  }));
+}
+
+export async function collegaCorpora(
+  token: string, id: string, kbIds: string[],
+): Promise<PersonalitaPropria> {
+  return leggi(await fetch(`${API}/me/personalities/${id}/corpora`, {
+    method: "PUT", headers: intestazioni(token), body: JSON.stringify({ kb_ids: kbIds }),
+  }));
+}
+
+export async function creaCorpusProprio(token: string, nome: string): Promise<CorpusProprio> {
+  return leggi(await fetch(`${API}/me/corpora`, {
+    method: "POST", headers: intestazioni(token), body: JSON.stringify({ nome }),
+  }));
+}
+
+export async function documentiDelCorpus(token: string, kbId: string): Promise<DocumentoProprio[]> {
+  return leggi(await fetch(`${API}/me/corpora/${kbId}/documents`, { headers: intestazioni(token) }));
+}
+
+export async function eliminaDocumentoProprio(token: string, kbId: string, docId: string): Promise<unknown> {
+  return leggi(await fetch(`${API}/me/corpora/${kbId}/documents/${docId}`, {
+    method: "DELETE", headers: intestazioni(token),
+  }));
+}
+
+export async function caricaNelCorpus(
+  token: string, kbId: string, file: File[],
+): Promise<{ build_id: string }> {
+  const modulo = new FormData();
+  for (const f of file) modulo.append("file", f, f.name);
+  return leggi(await fetch(`${API}/me/corpora/${kbId}/uploads`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}` }, body: modulo,
+  }));
+}
+
+export async function statoLavoro(token: string, buildId: string): Promise<Lavoro> {
+  return leggi(await fetch(`${API}/me/jobs/${buildId}`, { headers: intestazioni(token) }));
 }

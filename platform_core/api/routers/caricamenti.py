@@ -73,20 +73,22 @@ async def _pezzi(file: UploadFile) -> AsyncIterator[bytes]:
         yield pezzo
 
 
-@router.post("/knowledge-bases/{kb_id}/uploads", status_code=status.HTTP_202_ACCEPTED)
-async def carica(
-    kb_id: uuid.UUID,
-    session: DbSession,
-    ctx: Contesto,
-    supporto: Annotated[Any, Depends(get_key_value_store)],
-    file: List[UploadFile] = File(...),
-    lingua: Optional[str] = Form(default=None, pattern=r"^[a-z]{2}$"),
+async def accoda_ingestione(
+    session,
+    supporto,
+    kb,
+    file: List[UploadFile],
+    *,
+    lingua: Optional[str],
+    attore_id: int,
+    registra,
 ) -> Dict[str, Any]:
-    repo = AdminKnowledgeRepository(session, ctx)
-    kb = await repo.per_id(kb_id)
-    if kb is None:
-        raise HTTPException(status_code=404, detail="Knowledge base non trovata")
+    """Salva i file, crea il lavoro, lo accoda. Comune a console e utenti.
 
+    `registra` scrive la riga di audit: la console passa dal suo repository,
+    l'utente sui propri corpora da quello generico — la riga è la stessa,
+    cambia chi la firma.
+    """
     if len(file) > FILE_MASSIMI:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -109,6 +111,7 @@ async def carica(
 
     archivio = archivio_caricamenti()
     salvati: List[Dict[str, Any]] = []
+    nome = ""
     try:
         for caricato, nome in zip(file, nomi):
             riferimento, dimensione = await archivio.salva(
@@ -116,7 +119,7 @@ async def carica(
             )
             salvati.append({
                 "riferimento": riferimento, "nome": nome, "byte": dimensione,
-                "da": ctx.attore.id,
+                "da": attore_id,
             })
     except FileTroppoGrande as exc:
         for voce in salvati:
@@ -145,11 +148,9 @@ async def carica(
             "lingua": lingua,
             "file": salvati,
         },
-        owner_id=ctx.attore.id,
+        owner_id=attore_id,
     )
-    await repo.registra_caricamento(
-        kb, build_id=build.id, file=[{"nome": v["nome"], "byte": v["byte"]} for v in salvati],
-    )
+    await registra(build.id, [{"nome": v["nome"], "byte": v["byte"]} for v in salvati])
     await session.commit()
 
     CodaBuild(supporto).accoda(JobBuild(
@@ -157,7 +158,7 @@ async def carica(
     ))
     logger.info(
         "%d file caricati in %s da %s (build %s)",
-        len(salvati), kb.slug, ctx.attore.id, str(build.id)[:8],
+        len(salvati), kb.slug, attore_id, str(build.id)[:8],
     )
 
     return {
@@ -166,3 +167,26 @@ async def carica(
         "lingua": lingua,
         "file": [{"nome": v["nome"], "byte": v["byte"]} for v in salvati],
     }
+
+
+@router.post("/knowledge-bases/{kb_id}/uploads", status_code=status.HTTP_202_ACCEPTED)
+async def carica(
+    kb_id: uuid.UUID,
+    session: DbSession,
+    ctx: Contesto,
+    supporto: Annotated[Any, Depends(get_key_value_store)],
+    file: List[UploadFile] = File(...),
+    lingua: Optional[str] = Form(default=None, pattern=r"^[a-z]{2}$"),
+) -> Dict[str, Any]:
+    repo = AdminKnowledgeRepository(session, ctx)
+    kb = await repo.per_id(kb_id)
+    if kb is None:
+        raise HTTPException(status_code=404, detail="Knowledge base non trovata")
+
+    async def registra(build_id, voci):
+        await repo.registra_caricamento(kb, build_id=build_id, file=voci)
+
+    return await accoda_ingestione(
+        session, supporto, kb, file,
+        lingua=lingua, attore_id=ctx.attore.id, registra=registra,
+    )

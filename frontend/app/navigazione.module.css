@@ -214,7 +214,7 @@
     bottom: 0;
     z-index: 10;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     border-top: 1px solid var(--filo-tenue);
     background: color-mix(in srgb, var(--carta) 94%, transparent);
     backdrop-filter: blur(8px);

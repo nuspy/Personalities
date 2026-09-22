@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional, Sequence
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .base import utcnow
@@ -210,19 +210,32 @@ class PersonalityRepository:
         self._session = session
 
     async def pubblicate(self) -> Sequence[Personality]:
+        """Il catalogo: pubblicate e pubbliche. Le private non ci entrano."""
         result = await self._session.execute(
             select(Personality)
-            .where(Personality.status == "published")
+            .where(Personality.status == "published", Personality.visibility == "pubblica")
             .order_by(Personality.display_name)
         )
         return result.scalars().all()
 
-    async def per_slug(self, slug: str) -> Optional[Personality]:
-        result = await self._session.execute(
-            select(Personality).where(
-                Personality.slug == slug, Personality.status == "published",
-            )
-        )
+    async def per_slug(
+        self, slug: str, *, per_utente: Optional[int] = None,
+    ) -> Optional[Personality]:
+        """Una personalità pubblicata, se chi chiede può vederla.
+
+        Le private solo al loro proprietario: per chiunque altro non esistono
+        — `None` e non un rifiuto, perché distinguere rivelerebbe quali slug
+        sono in uso.
+        """
+        condizioni = [Personality.slug == slug, Personality.status == "published"]
+        if per_utente is None:
+            condizioni.append(Personality.visibility == "pubblica")
+        else:
+            condizioni.append(or_(
+                Personality.visibility == "pubblica",
+                Personality.owner_id == per_utente,
+            ))
+        result = await self._session.execute(select(Personality).where(*condizioni))
         return result.scalar_one_or_none()
 
     async def versione(self, version_id: uuid.UUID) -> Optional[PersonalityVersion]:

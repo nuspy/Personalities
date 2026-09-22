@@ -101,6 +101,7 @@ export interface Personalita {
   display_name: string;
   description: string | null;
   status: "draft" | "published" | "archived";
+  visibility: "pubblica" | "privata";
   current_version_id: string | null;
   avatar_id: string | null;
   tipi: Tipo[];

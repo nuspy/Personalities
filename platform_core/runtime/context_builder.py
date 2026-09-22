@@ -109,6 +109,10 @@ class StratoVolatile:
     memorie: List[str] = field(default_factory=list)
     riassunto_sessione: str = ""
     passaggi: List[PassaggioRecuperato] = field(default_factory=list)
+    #: Le altre voci chiamate in causa con `@Nome`. Qui e non nello strato 0:
+    #: cambiano a ogni domanda, e sopra il punto di cache annullerebbero lo
+    #: sconto sul prefisso di tutte le altre.
+    menzioni: List[str] = field(default_factory=list)
 
     def rendi(self) -> str:
         parti: List[str] = []
@@ -122,6 +126,15 @@ class StratoVolatile:
                 + "\n".join(f"- {m}" for m in self.memorie)
             )
 
+        if self.menzioni:
+            parti.append(
+                "Chi ti scrive chiama in causa "
+                + ", ".join(self.menzioni)
+                + ". I passaggi segnati «di …» vengono dai suoi scritti, non dai "
+                "tuoi: puoi citarli e discuterli come parole sue, mai "
+                "attribuirteli."
+            )
+
         if self.passaggi:
             righe = [INTESTAZIONE_PASSAGGI, ""]
             for passaggio in self.passaggi:
@@ -129,6 +142,8 @@ class StratoVolatile:
                 fonte = c.documento_titolo
                 if c.sezione:
                     fonte = f"{fonte} — {c.sezione}"
+                if passaggio.voce:
+                    fonte = f"di {passaggio.voce}: {fonte}"
                 righe.append(f"[{passaggio.etichetta}] ({fonte})")
                 righe.append(c.testo.strip())
                 righe.append("")
@@ -216,9 +231,11 @@ def strato_volatile_da_recupero(
     *,
     memorie: Optional[Sequence[str]] = None,
     riassunto: str = "",
+    menzioni: Optional[Sequence[str]] = None,
 ) -> StratoVolatile:
     return StratoVolatile(
         memorie=list(memorie or []),
         riassunto_sessione=riassunto,
         passaggi=esito.scelti,
+        menzioni=list(menzioni or []),
     )

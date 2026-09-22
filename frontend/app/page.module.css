@@ -503,6 +503,24 @@
   font-family: var(--interfaccia), sans-serif;
   font-size: 0.875rem;
   max-width: 11rem;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+/* Sul telefono la testata porta marchio, menu, scelta e «Nuova»: la scelta
+ * cede spazio per prima, perché il nome intero si legge sotto il campo. */
+@media (max-width: 30rem) {
+  .testata {
+    gap: 0.4rem;
+  }
+
+  .marchio {
+    font-size: 1.1rem;
+  }
+
+  .scelta {
+    max-width: 30vw;
+  }
 }
 
 .scelta:disabled {
@@ -572,4 +590,17 @@
 .erroreVoce {
   font-size: 0.8125rem;
   color: var(--allarme);
+}
+
+/* ---- voci chiamate in causa con @Nome ---- */
+
+.fonteVoce {
+  color: var(--rubrica);
+}
+
+.menzioni {
+  margin: 0.5rem 0 0;
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  color: var(--inchiostro-tenue);
 }

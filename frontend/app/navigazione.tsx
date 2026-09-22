@@ -3,8 +3,8 @@
 /* Le quattro sezioni, e l'involucro delle pagine che non sono la conversazione.
  *
  * **In alto su schermo largo, in basso sul telefono.** Sul telefono le voci
- * stanno sotto il pollice, in una barra da quattro — il massimo sensato è
- * cinque, oltre diventa un menu travestito. La pagina della conversazione non
+ * stanno sotto il pollice, in una barra da cinque — il massimo sensato:
+ * oltre diventa un menu travestito. La pagina della conversazione non
  * ha la barra in basso: lì il posto è del campo in cui si scrive, e le
  * sezioni restano raggiungibili dalla testata.
  */
@@ -18,6 +18,7 @@ export const SEZIONI = [
   { href: "/", etichetta: "Conversa", segno: "¶" },
   { href: "/conversazioni", etichetta: "Conversazioni", segno: "≡" },
   { href: "/memorie", etichetta: "Memorie", segno: "◎" },
+  { href: "/crea", etichetta: "Crea", segno: "✎" },
   { href: "/piano", etichetta: "Piano", segno: "◇" },
 ];
 

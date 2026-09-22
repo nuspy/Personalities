@@ -70,6 +70,11 @@ class PassaggioRecuperato:
     #: chiamare nessun modello.
     etichetta: str = ""
 
+    #: La voce da cui viene il passaggio, quando non è quella che risponde:
+    #: un `@Nome` nella domanda porta nel prompt i passaggi di un'altra
+    #: personalità, e il modello deve sapere di chi sono.
+    voce: Optional[str] = None
+
     @property
     def trovato_da_entrambe(self) -> bool:
         return (
@@ -87,6 +92,7 @@ class PassaggioRecuperato:
             "pos_vettoriale": self.posizione_vettoriale,
             "pos_lessicale": self.posizione_lessicale,
             "somiglianza": round(self.somiglianza, 4) if self.somiglianza else None,
+            **({"voce": self.voce} if self.voce else {}),
         }
 
 

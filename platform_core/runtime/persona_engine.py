@@ -42,6 +42,20 @@ logger = logging.getLogger(__name__)
 MODI = ("rag", "lora", "finetune")
 
 
+#: Quanti passaggi porta ciascuna voce chiamata in causa. Pochi: è un
+#: interlocutore, non la fonte della risposta, e il contesto è di chi risponde.
+PASSAGGI_PER_MENZIONE = 3
+
+
+@dataclass(frozen=True)
+class Menzione:
+    """Un'altra voce chiamata in causa con `@Nome`, già risolta e permessa."""
+
+    slug: str
+    nome: str
+    kb_ids: tuple
+
+
 @dataclass
 class EsitoTurno:
     """Cosa è successo in un turno, oltre al testo."""
@@ -55,6 +69,8 @@ class EsitoTurno:
     modo_richiesto: str = "rag"
     motivo_degrado: str = ""
     tempi_ms: Dict[str, int] = field(default_factory=dict)
+    #: I nomi delle voci chiamate in causa che hanno portato passaggi.
+    menzioni: List[str] = field(default_factory=list)
 
     @property
     def degradato(self) -> bool:
@@ -148,6 +164,7 @@ class PersonaEngine:
         modo: str = "rag",
         modi_disponibili: Sequence[str] = ("rag",),
         politiche: Sequence[str] = (),
+        menzioni: Sequence["Menzione"] = (),
     ) -> EsitoTurno:
         """Recupera e costruisce il prompt, senza ancora generare.
 
@@ -173,11 +190,35 @@ class PersonaEngine:
             esito.recupero = await self._retriever.cerca(
                 domanda, kb_ids, limite=limite,
             )
+
+        # Le voci chiamate in causa: pochi passaggi ciascuna, numerati dopo
+        # quelli propri. Dopo e non mescolati: la voce che risponde resta la
+        # fonte principale, e l'altra entra solo dove la si è chiamata.
+        chiamate = []
+        if self._retriever is not None:
+            for menzione in menzioni:
+                if not menzione.kb_ids:
+                    continue
+                trovati = await self._retriever.cerca(
+                    domanda, menzione.kb_ids, limite=PASSAGGI_PER_MENZIONE,
+                )
+                if not trovati.scelti:
+                    continue
+                if esito.recupero is None:
+                    esito.recupero = EsitoRecupero(domanda=domanda)
+                for passaggio in trovati.scelti:
+                    passaggio.voce = menzione.nome
+                    passaggio.etichetta = f"K{len(esito.recupero.scelti) + 1}"
+                    esito.recupero.scelti.append(passaggio)
+                esito.recupero.kb_interrogate.extend(str(k) for k in menzione.kb_ids)
+                chiamate.append(menzione.nome)
+        esito.menzioni = chiamate
         esito.tempi_ms["recupero"] = int((time.perf_counter() - inizio) * 1000)
 
         volatile = (
             strato_volatile_da_recupero(
                 esito.recupero, memorie=memorie, riassunto=riassunto,
+                menzioni=chiamate,
             )
             if esito.recupero
             else StratoVolatile(memorie=list(memorie), riassunto_sessione=riassunto)

@@ -52,6 +52,8 @@ from ...llm.base import (
     TruncatedResponse,
 )
 from ...observability.correlation import current_correlation_id
+from ...runtime.menzioni import menzioni_json
+from ...runtime.menzioni import risolvi as risolvi_menzioni
 from ...runtime.persona_engine import PersonaEngine, riferimenti_citati
 
 logger = logging.getLogger(__name__)
@@ -135,7 +137,7 @@ async def chat(
     slug_personalita: Optional[str] = None
 
     if payload.personality:
-        personalita = await personalita_repo.per_slug(payload.personality)
+        personalita = await personalita_repo.per_slug(payload.personality, per_utente=user.id)
         if personalita is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -304,9 +306,20 @@ async def chat(
     conversazione_id = conversazione.id
     versione_id = versione.id if versione else None
 
+    # Le altre voci chiamate con `@Nome`: con gli stessi diritti con cui si
+    # parla a quella principale, o una menzione aggirerebbe il piano.
+    menzioni, escluse = [], []
+    if versione is not None:
+        menzioni, escluse = await risolvi_menzioni(
+            session, payload.message,
+            user_id=user.id,
+            diritti=await GestoreAbbonamenti(session).diritti_di(user.id),
+            escludi=versione.personality_id,
+        )
+
     motore = PersonaEngine(
         provider,
-        retriever=Retriever(session, embedder) if kb_ids else None,
+        retriever=Retriever(session, embedder) if kb_ids or menzioni else None,
     )
 
     # Le memorie entrano nello strato 1, sotto il punto di cache: cambiano a
@@ -341,6 +354,7 @@ async def chat(
             # costa una volta sola perché sta nel prefisso, e agisce prima che
             # il problema esista.
             politiche=guardrail.istruzioni_per(slug_personalita),
+            menzioni=menzioni,
         )
         rubriche = guardrail.rubriche_per(slug_personalita)
 
@@ -361,6 +375,14 @@ async def chat(
             "personality": slug_personalita,
         })
 
+        if menzioni or escluse:
+            # Chi è entrato nella risposta e chi no, e perché: una menzione
+            # ignorata in silenzio sembra un difetto, una rifiutata col motivo
+            # è un'informazione.
+            yield sse("menzioni", menzioni_json(
+                [m for m in menzioni if turno and m.nome in turno.menzioni], escluse,
+            ))
+
         if turno is not None and turno.recupero:
             # Le fonti prima del testo: il margine si popola mentre la
             # risposta arriva, non dopo che è finita.
@@ -372,6 +394,7 @@ async def chat(
                         "sezione": p.corrispondenza.sezione,
                         "uri": p.corrispondenza.documento_uri,
                         "estratto": p.corrispondenza.testo[:240].strip(),
+                        "voce": p.voce,
                     }
                     for p in turno.recupero.scelti
                 ]

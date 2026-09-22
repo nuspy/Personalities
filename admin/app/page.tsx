@@ -83,6 +83,11 @@ function Tabella({ personalita }: { personalita: Personalita[] }) {
               <td className={stili.mono}>{p.slug}</td>
               <td>
                 <Stato stato={p.status} haVersione={!!p.current_version_id} />
+                {p.visibility === "privata" && (
+                  <span className={stili.stato} title="Creata da un utente per sé: fuori dal catalogo">
+                    {" "}privata
+                  </span>
+                )}
               </td>
               <td>
                 {p.tipi.length === 0 ? (

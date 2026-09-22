@@ -294,6 +294,13 @@ class Personality(Base, TimestampMixin, OwnedMixin):
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
+    #: `pubblica` sta nel catalogo; `privata` è di chi l'ha creata da sé e la
+    #: vede solo lui. Separata da `status`: una personalità privata è
+    #: pubblicata — la si usa — ma per una persona sola, e confondere i due
+    #: assi avrebbe messo nel catalogo le prove di chiunque.
+    visibility: Mapped[str] = mapped_column(
+        String(20), default="pubblica", server_default="pubblica", nullable=False,
+    )
 
     #: La categoria commerciale: decide quale piano dà accesso a questa voce.
     #: Nullo significa «accessibile a tutti», che è lo stato in cui nasce una
@@ -338,6 +345,10 @@ class Personality(Base, TimestampMixin, OwnedMixin):
         CheckConstraint(
             "status in ('draft', 'published', 'archived')",
             name="ck_personalities_status",
+        ),
+        CheckConstraint(
+            "visibility in ('pubblica', 'privata')",
+            name="ck_personalities_visibility",
         ),
         # «Le personalità di questo utente, quelle pubblicate»: è l'unica query
         # che la console e il catalogo fanno davvero.

@@ -148,6 +148,9 @@ def _personalita_json(p: Personality) -> Dict[str, Any]:
         "display_name": p.display_name,
         "description": p.description,
         "status": p.status,
+        # Le private sono degli utenti che le hanno create: la console le
+        # vede — risponde anche di quelle — ma non le mette nel catalogo.
+        "visibility": p.visibility,
         "current_version_id": str(p.current_version_id) if p.current_version_id else None,
         "avatar_id": str(p.avatar_id) if p.avatar_id else None,
         "tipi": [{"id": t.id, "slug": t.slug, "name": t.name} for t in p.types],
