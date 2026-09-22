@@ -362,3 +362,103 @@ class TestNelMotore:
 
         assert primo.contesto.testo_stabile == secondo.contesto.testo_stabile
         assert "example.com" not in primo.contesto.testo_stabile
+
+
+class TestFirecrawl:
+    """La forma della richiesta, senza rete.
+
+    Provata anche per davvero contro un Firecrawl ospitato in proprio; qui si
+    fissa ciò che quella prova non ripeterà a ogni commit.
+    """
+
+    def _client(self, risposta: dict, registro: list):
+        import httpx
+
+        from platform_core.knowledge.ricerca_web import RicercaFirecrawl
+
+        def gestore(richiesta: httpx.Request) -> httpx.Response:
+            import json as _json
+
+            registro.append({
+                "url": str(richiesta.url),
+                "corpo": _json.loads(richiesta.content),
+                "intestazioni": dict(richiesta.headers),
+            })
+            return httpx.Response(200, json=risposta)
+
+        return RicercaFirecrawl(
+            base_url="http://ricerca.prova", transport=httpx.MockTransport(gestore),
+        )
+
+    async def test_chiede_la_pagina_intera_non_l_anteprima(self):
+        """È la ragione per cui Firecrawl e non un motore di ricerca: senza
+        `markdown` tornerebbero due righe di descrizione, e su due righe la
+        verifica di fondatezza boccia tutto."""
+        registro: list = []
+        fornitore = self._client({"success": True, "data": []}, registro)
+
+        await fornitore.cerca("qualcosa", limite=3)
+
+        corpo = registro[0]["corpo"]
+        assert corpo["scrapeOptions"]["formats"] == ["markdown"]
+        assert corpo["scrapeOptions"]["onlyMainContent"] is True
+        assert registro[0]["url"].endswith("/v1/search")
+
+    async def test_chiede_piu_risultati_di_quanti_ne_servano(self):
+        """Il filtro sui domini ne toglie: chiederne esattamente tre
+        significherebbe restarne con uno."""
+        registro: list = []
+        fornitore = self._client({"success": True, "data": []}, registro)
+
+        await fornitore.cerca("x", siti=["example.com"], solo=True, limite=3)
+
+        assert registro[0]["corpo"]["limit"] > 3
+
+    async def test_in_modo_solo_passa_gli_operatori_di_sito(self):
+        registro: list = []
+        fornitore = self._client({"success": True, "data": []}, registro)
+
+        await fornitore.cerca("garanzia", siti=["example.com", "altro.it"], solo=True)
+
+        query = registro[0]["corpo"]["query"]
+        assert "site:example.com" in query and "site:altro.it" in query
+
+    async def test_in_modo_anche_la_domanda_resta_pulita(self):
+        """La lista è una preferenza: vincolare la query la trasformerebbe in
+        un muro, che è l'altro modo."""
+        registro: list = []
+        fornitore = self._client({"success": True, "data": []}, registro)
+
+        await fornitore.cerca("garanzia", siti=["example.com"], solo=False)
+
+        assert registro[0]["corpo"]["query"] == "garanzia"
+
+    async def test_legge_la_risposta_nella_forma_che_firecrawl_restituisce(self):
+        registro: list = []
+        fornitore = self._client({
+            "success": True,
+            "data": [{
+                "url": "https://example.com/a",
+                "title": "Titolo",
+                "markdown": "# Testo della pagina",
+                "description": "due righe",
+                "metadata": {"publishedTime": "2026-03-01T10:00:00Z"},
+            }],
+        }, registro)
+
+        risultati = await fornitore.cerca("x")
+
+        assert risultati[0].url == "https://example.com/a"
+        assert risultati[0].testo == "# Testo della pagina"
+        assert risultati[0].pubblicato.startswith("2026-03-01")
+
+    async def test_senza_indirizzo_lo_dice(self):
+        from platform_core.knowledge.ricerca_web import (
+            RicercaFirecrawl, RicercaNonDisponibile,
+        )
+
+        fornitore = RicercaFirecrawl(base_url="")
+
+        assert not fornitore.disponibile()
+        with pytest.raises(RicercaNonDisponibile):
+            await fornitore.cerca("x")

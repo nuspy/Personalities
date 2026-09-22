@@ -1,0 +1,82 @@
+# SearXNG: chi trova gli indirizzi.
+#
+# **Firecrawl ospitato in proprio non sa cercare.** Sa prendere una pagina e
+# restituirla ripulita — che è la ragione per cui lo usiamo invece di un'API
+# di ricerca, che darebbe due righe di anteprima su cui non si ancora niente —
+# ma l'elenco degli indirizzi da prendere glielo deve dare qualcuno. Sul
+# servizio ospitato da loro quel qualcuno è dentro; qui è questo container.
+#
+# È anche la ragione per cui le domande degli utenti non escono verso un
+# fornitore di ricerca commerciale: SearXNG interroga i motori senza portarsi
+# dietro un'identità, e sta nel nostro cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: searxng
+spec:
+  selector:
+    app.kubernetes.io/name: searxng
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: searxng
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: searxng
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: searxng
+    spec:
+      containers:
+        - name: searxng
+          image: searxng/searxng:2026.9.22-2ed96e6fc
+          env:
+            - name: SEARXNG_BASE_URL
+              value: http://searxng:8080/
+            - name: SEARXNG_SECRET
+              valueFrom:
+                secretKeyRef: {name: ricerca-segreti, key: SEARXNG_SECRET}
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 100m, memory: 192Mi}
+            limits: {memory: 768Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - name: configurazione
+              mountPath: /etc/searxng/settings.yml
+              subPath: settings.yml
+              readOnly: true
+            # L'immagine scrive la cache dei template e i log sotto queste
+            # due: senza, parte e poi fallisce alla prima ricerca.
+            - name: effimero
+              mountPath: /var/cache/searxng
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: configurazione
+          configMap:
+            name: searxng-configurazione
+        - name: effimero
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi

@@ -239,6 +239,7 @@ class RicercaFirecrawl:
         api_key: str = "",
         *,
         timeout: float = 30.0,
+        transport=None,
     ) -> None:
         from ..settings import get_settings
 
@@ -246,6 +247,8 @@ class RicercaFirecrawl:
         self._base_url = (base_url or s.ricerca_base_url).rstrip("/")
         self._api_key = api_key or s.ricerca_api_key
         self._timeout = timeout
+        #: Per le prove: permette di intercettare le richieste senza rete.
+        self._transport = transport
 
     def disponibile(self) -> bool:
         return bool(self._base_url)
@@ -274,7 +277,9 @@ class RicercaFirecrawl:
             "scrapeOptions": {"formats": ["markdown"], "onlyMainContent": True},
         }
 
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
+        async with httpx.AsyncClient(
+            timeout=self._timeout, transport=self._transport,
+        ) as client:
             risposta = await client.post(
                 f"{self._base_url}/v1/search", json=corpo, headers=intestazioni,
             )

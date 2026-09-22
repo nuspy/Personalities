@@ -126,5 +126,122 @@ services:
       redis:
         condition: service_healthy
 
+  # --- ricerca online: spenta di default ----------------------------------
+  #
+  # Sei container per cercare sul web, e per questo stanno dietro un profilo:
+  # `docker compose up` non li avvia, e chi non usa la ricerca non se ne
+  # accorge. Si accendono con
+  #
+  #   docker compose --profile ricerca up -d
+  #
+  # e si spengono con `--profile ricerca down`.
+  #
+  # Perché sei. Firecrawl ospitato in proprio non è un servizio solo: l'API
+  # e i suoi worker girano in un container, il browser senza schermo in un
+  # altro, e in mezzo vogliono una coda (RabbitMQ), un Postgres proprio per
+  # lo stato della coda e un Redis per la cache. E soprattutto **non sa
+  # cercare**: sa prendere una pagina e ripulirla, ma l'elenco degli
+  # indirizzi glielo deve dare SearXNG.
+
+  searxng:
+    image: searxng/searxng:2026.9.22-2ed96e6fc
+    profiles: [ricerca]
+    environment:
+      SEARXNG_BASE_URL: http://searxng:8080/
+      SEARXNG_SECRET: sviluppo-non-usare-in-produzione
+    volumes:
+      - ./deploy/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    ports:
+      # Esposta solo in sviluppo, per poterla interrogare a mano quando una
+      # ricerca non restituisce ciò che ci si aspetta. La 8090 e non la 8088:
+      # quella è del cluster k3s di prova (`prova-locale.sh`), e le due cose
+      # capita spesso di volerle accese insieme. Mai la 8000, che è di altri
+      # progetti.
+      - "8090:8080"
+
+  redis-ricerca:
+    image: redis:7-alpine
+    profiles: [ricerca]
+    # Un Redis suo e non il nostro: Firecrawl lo usa per cache e limiti, e un
+    # supporto condiviso significa che un suo difetto raggiunge la coda dei
+    # nostri lavori. Cinquanta megabyte per non accoppiare due cose che non
+    # hanno ragione di esserlo.
+    command: redis-server --save "" --appendonly no
+
+  rabbitmq-ricerca:
+    image: rabbitmq:3.13-alpine
+    profiles: [ricerca]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  nuq-postgres:
+    image: ghcr.io/firecrawl/nuq-postgres@sha256:a582bc385702f3a93cafe2d8c749d55b6676e7c2761e94923113badf7af4b54f
+    profiles: [ricerca]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  playwright-ricerca:
+    image: ghcr.io/firecrawl/playwright-service@sha256:5cd4c2590eebcb8e0932553187d36ab7e76249165712b2bdbae6438b0b033d40
+    profiles: [ricerca]
+    environment:
+      PORT: "3000"
+      BLOCK_MEDIA: "true"
+      MAX_CONCURRENT_PAGES: "4"
+
+  firecrawl:
+    image: ghcr.io/firecrawl/firecrawl@sha256:5a1c33ee0456e7af347e454fdd1cf819ad30bedaf5842b796739161de983b48b
+    profiles: [ricerca]
+    command: node dist/src/harness.js --start-docker
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3002"
+      ENV: local
+      # Senza autenticazione: chi raggiunge il servizio lo usa. In sviluppo
+      # è la rete di Compose; in Kubernetes è lo spazio dei nomi, dove
+      # l'autorizzazione di Istio non lascia entrare nessun altro.
+      USE_DB_AUTHENTICATION: "false"
+      REDIS_URL: redis://redis-ricerca:6379
+      REDIS_RATE_LIMIT_URL: redis://redis-ricerca:6379
+      PLAYWRIGHT_MICROSERVICE_URL: http://playwright-ricerca:3000/scrape
+      NUQ_RABBITMQ_URL: amqp://rabbitmq-ricerca:5672
+      POSTGRES_HOST: nuq-postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      # Chi trova gli indirizzi che poi Firecrawl va a prendere.
+      SEARXNG_ENDPOINT: http://searxng:8080
+      # Uno: il container avvia un processo Node per worker più quattro di
+      # servizio, e ciascuno parte da due o trecento megabyte.
+      NUM_WORKERS_PER_QUEUE: "1"
+      CRAWL_CONCURRENT_REQUESTS: "4"
+      MAX_CONCURRENT_JOBS: "2"
+      BROWSER_POOL_SIZE: "2"
+      LOGGING_LEVEL: info
+    ports:
+      - "3002:3002"
+    depends_on:
+      redis-ricerca:
+        condition: service_started
+      rabbitmq-ricerca:
+        condition: service_healthy
+      nuq-postgres:
+        condition: service_healthy
+      playwright-ricerca:
+        condition: service_started
+      searxng:
+        condition: service_started
+
 volumes:
   postgres_data:

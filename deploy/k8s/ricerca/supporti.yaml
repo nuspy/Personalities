@@ -1,0 +1,173 @@
+# I supporti che Firecrawl pretende: un Redis, una coda, un Postgres.
+#
+# **Perché non riusiamo i nostri.** Il Redis della piattaforma porta le code
+# dei lavori e i battiti dei worker; il Postgres porta i dati degli utenti.
+# Condividerli significa che un difetto di un servizio di terze parti — o un
+# suo `FLUSHALL` fuori posto — raggiunge cose che non hanno niente a che fare
+# con la ricerca sul web. Qualche centinaio di megabyte è un prezzo basso per
+# non accoppiare due cose che non hanno ragione di esserlo.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-ricerca
+spec:
+  selector:
+    app.kubernetes.io/name: redis-ricerca
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-ricerca
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis-ricerca
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis-ricerca
+    spec:
+      # L'utente dell'immagine, scelto qui invece di lasciarlo fare a lei.
+      # Queste immagini partono da root e scendono al proprio utente con
+      # `setpriv`, che senza CAP_SETUID fallisce: con `drop: [ALL]` il
+      # container muore prima di dire una parola sul perché. Partendo già
+      # come l'utente giusto non c'è nessuna discesa da fare.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          # Senza persistenza: qui dentro c'è cache e conteggio di limiti,
+          # e ricostruirli costa una ricerca più lenta, non un dato perso.
+          args: ["redis-server", "--save", "", "--appendonly", "no"]
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            exec: {command: ["redis-cli", "ping"]}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}
+            limits: {memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-ricerca
+spec:
+  selector:
+    app.kubernetes.io/name: rabbitmq-ricerca
+  ports:
+    - name: tcp-amqp
+      port: 5672
+      targetPort: 5672
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq-ricerca
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq-ricerca
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rabbitmq-ricerca
+    spec:
+      # Come per Redis: `su-exec` senza CAP_SETGID non può cambiare gruppo.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+      containers:
+        - name: rabbitmq
+          # Senza il plugin di gestione: è un'interfaccia web che nessuno
+          # raggiungerebbe, e che sarebbe una porta in più da non esporre.
+          image: rabbitmq:3.13-alpine
+          ports:
+            - containerPort: 5672
+          readinessProbe:
+            exec: {command: ["rabbitmq-diagnostics", "-q", "check_running"]}
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {memory: 768Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nuq-postgres
+spec:
+  selector:
+    app.kubernetes.io/name: nuq-postgres
+  ports:
+    - name: tcp-postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nuq-postgres
+spec:
+  serviceName: nuq-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nuq-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nuq-postgres
+    spec:
+      containers:
+        - name: postgres
+          # L'immagine di Firecrawl, non un Postgres qualunque: porta lo
+          # schema della loro coda già dentro. Fissata al digest perché
+          # pubblicano solo `latest` — vedi il README.
+          image: ghcr.io/firecrawl/nuq-postgres@sha256:a582bc385702f3a93cafe2d8c749d55b6676e7c2761e94923113badf7af4b54f
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_DB
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: ricerca-segreti, key: POSTGRES_PASSWORD}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec: {command: ["pg_isready", "-U", "postgres", "-d", "postgres"]}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          volumeMounts:
+            - name: dati
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: dati
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 2Gi

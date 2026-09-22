@@ -18,6 +18,10 @@ resources:
 
 components:
   - ../../istio
+  # La ricerca online: Firecrawl, SearXNG e i loro supporti. Sei carichi di
+  # lavoro, e per questo un componente e non parte della base — si toglie
+  # cancellando questa riga, e la piattaforma risponde con i corpora che ha.
+  - ../../ricerca
 
 # Il registro e il tag del rilascio. REGISTRO è un segnaposto: il servizio
 # che ospita le immagini non è ancora deciso (vedi il README).
@@ -53,7 +57,10 @@ configMapGenerator:
       # o `firecrawl`. Spenta, le voci che la chiedono rispondono con il
       # corpus che hanno e la traccia dice cosa è mancato. L'indirizzo e la
       # chiave stanno fra i segreti.
-      - PERSONA_RICERCA_PROVIDER=disattivata
+      - PERSONA_RICERCA_PROVIDER=firecrawl
+      # Il servizio dello spazio dei nomi, non un indirizzo pubblico: non è
+      # raggiungibile da fuori, e non deve esserlo.
+      - PERSONA_RICERCA_BASE_URL=http://firecrawl:3002
   - name: keycloak-realm
     files:
       - realm.json=../../../keycloak/realm-personalities.prod.json
@@ -66,6 +73,10 @@ secretGenerator:
   # I segnaposto del realm di Keycloak. Vedi keycloak.env.example.
   - name: keycloak-realm-segreti
     envs: [keycloak.env]
+  # Password del Postgres della coda e chiave di sessione di SearXNG.
+  # Vedi ricerca.env.example.
+  - name: ricerca-segreti
+    envs: [ricerca.env]
   # La chiave con cui il worker accende il motore locale. Da scommentare
   # quando le chiavi esistono: si generano al dispiegamento, perché la riga
   # `from=` in authorized_keys vuole l'indirizzo di egress vero del cluster —

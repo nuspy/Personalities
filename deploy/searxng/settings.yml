@@ -1,0 +1,32 @@
+# SearXNG per la ricerca della piattaforma: un metamotore che interroga altri
+# motori e non tiene profili. Sta qui perché Firecrawl, ospitato in proprio,
+# **non sa cercare da solo**: sa prendere una pagina e ripulirla, ma l'elenco
+# degli indirizzi glielo deve dare qualcuno (`SEARXNG_ENDPOINT`).
+#
+# `use_default_settings` tiene tutto il resto com'è: qui si cambia solo ciò
+# che senza modifica renderebbe il servizio inutilizzabile da un programma.
+use_default_settings: true
+
+server:
+  # Il valore vero arriva da SEARXNG_SECRET, nell'ambiente.
+  secret_key: "da-sostituire"
+  # Il limitatore serve a difendere un'istanza pubblica dai robot. Qui i
+  # robot siamo noi: acceso, respingerebbe ogni richiesta del worker come
+  # traffico automatico — che è esattamente ciò che è.
+  limiter: false
+  image_proxy: false
+
+search:
+  # **La riga che conta.** Senza `json` SearXNG risponde soltanto in HTML, e
+  # chi lo interroga da programma riceve una pagina web da cui estrarre i
+  # risultati a mano. È il motivo più comune per cui una ricerca ospitata in
+  # proprio «non restituisce niente».
+  formats:
+    - html
+    - json
+  # Una lingua neutra: la personalità decide cosa chiedere, non da dove.
+  default_lang: "all"
+  autocomplete: ""
+
+ui:
+  static_use_hash: true

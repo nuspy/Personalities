@@ -175,11 +175,75 @@ e lo fa di solito; «di solito» non è una garanzia, e un risultato fuori lista
 dentro il contesto di una voce professionale è esattamente il caso che la
 lista doveva impedire. Il filtro vero è sui risultati, sottodomini compresi.
 
-Il fornitore è Firecrawl (`PERSONA_RICERCA_PROVIDER=firecrawl` più indirizzo e
-chiave fra i segreti) perché restituisce la pagina già ripulita invece di uno
-snippet di due righe: su due righe non si ancora niente, e la verifica di
-fondatezza le boccerebbe quasi sempre. Spento, una voce che chiede la ricerca
-risponde lo stesso con il corpus che ha, e la traccia dice cosa è mancato.
+### Chi la fa: sei container, e perché
+
+`components: - ../../ricerca` nell'overlay di produzione porta sei carichi di
+lavoro. Non è sovradimensionamento: è la forma che ha Firecrawl ospitato in
+proprio.
+
+| | |
+|---|---|
+| `firecrawl` | l'API e i suoi worker. Prende una pagina e la restituisce ripulita in markdown |
+| `playwright-ricerca` | il browser senza schermo, per le pagine che si compongono in JavaScript |
+| `searxng` | **trova gli indirizzi**: Firecrawl ospitato in proprio non sa cercare |
+| `redis-ricerca` | cache e conteggio dei limiti |
+| `rabbitmq-ricerca` | la coda dei lavori di Firecrawl |
+| `nuq-postgres` | lo stato di quella coda |
+
+Firecrawl e non un'API di ricerca perché quella darebbe **snippet di due
+righe**, e su due righe non si ancora niente: la verifica di fondatezza le
+boccerebbe quasi sempre. Qui la pagina arriva intera e pulita, cioè nella
+forma in cui i passaggi entrano nel contesto.
+
+SearXNG perché senza `SEARXNG_ENDPOINT` l'endpoint di ricerca di Firecrawl
+risponde «nessun risultato» per sempre, senza errori — il modo in cui
+un'installazione sembra funzionare e non funziona. In più le domande degli
+utenti non escono verso un fornitore commerciale: il metamotore sta nel
+cluster e interroga i motori senza portarsi dietro un'identità.
+
+**Nessuno dei sei è esposto.** Non portano l'etichetta
+`personalities/esposto`, il gateway non ha rotte verso di loro, e
+l'autorizzazione di Istio lascia passare solo chi sta nello spazio dei nomi.
+È la ragione per cui Firecrawl può girare con `USE_DB_AUTHENTICATION=false`:
+verificato dal cluster di prova, un pod fuori dalla mesh non lo raggiunge e
+il gateway risponde 404.
+
+**Le immagini sono fissate al digest**: Firecrawl pubblica solo `latest`, e
+senza digest un rilascio qualunque porterebbe una versione nuova di un
+servizio di terze parti che nessuno ha deciso di aggiornare. Per aggiornare:
+`docker manifest inspect -v ghcr.io/firecrawl/firecrawl:latest` e si sostituisce
+il digest in `deploy/k8s/ricerca/`.
+
+Due misure trovate provandolo, e non deducibili: Firecrawl avvia **un processo
+Node per worker** più quattro di servizio, e con quattro worker moriva per
+esaurimento della memoria tre secondi dopo l'avvio — `NUM_WORKERS_PER_QUEUE=1`
+e quattro giga di limite; Redis e RabbitMQ partono da root e **scendono** al
+proprio utente, cosa che `capabilities: drop: [ALL]` impedisce, quindi partono
+già come l'utente giusto (`runAsUser` 999 e 100).
+
+Spenta (`PERSONA_RICERCA_PROVIDER=disattivata`, o togliendo il componente),
+una voce che chiede la ricerca risponde lo stesso con il corpus che ha, e la
+traccia dice cosa è mancato.
+
+### In locale
+
+Lo stack sta nel `docker-compose.yml`, **dietro un profilo**, così
+`docker compose up` non lo avvia e chi non usa la ricerca non se ne accorge:
+
+```bash
+docker compose --profile ricerca up -d     # sei container, circa 6 GB di immagini
+export PERSONA_RICERCA_PROVIDER=firecrawl
+export PERSONA_RICERCA_BASE_URL=http://127.0.0.1:3002
+docker compose --profile ricerca down      # e via
+```
+
+SearXNG si interroga a mano sulla **8090** quando una ricerca non restituisce
+ciò che ci si aspetta (mai la 8088: è del cluster k3s di prova).
+
+Il cluster di prova non include il componente, per non appesantire ogni
+esecuzione di `prova-locale.sh`. Per provarlo anche lì, si aggiunge
+`- ../../ricerca` fra i `components` di `overlays/locale` e un
+`ricerca-segreti` fra i suoi `secretGenerator`.
 
 Ciò che arriva dal web non entra mai nello strato stabile del prompt — cambia
 a ogni richiesta, e lo strato stabile deve restare identico byte per byte o lo

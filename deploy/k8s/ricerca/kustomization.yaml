@@ -1,0 +1,47 @@
+# La ricerca online come componente: la includono gli overlay che la vogliono.
+#
+#   components:
+#     - ../../ricerca
+#
+# Fuori dalla base di proposito. Sono sei carichi di lavoro — Firecrawl, il
+# browser senza schermo, SearXNG, un Redis, una coda e un Postgres — per una
+# funzione che molte installazioni non useranno mai, e che una personalità
+# accende per sé. Chi non la include non se ne accorge: la piattaforma
+# risponde con i corpora che ha, e la traccia dice che il fornitore manca.
+#
+# **Cosa fa ciascuno, e perché serve.**
+#
+# Firecrawl prende una pagina e la restituisce ripulita in markdown. È il
+# motivo per cui lo usiamo invece di un'API di ricerca: quella darebbe due
+# righe di anteprima, e su due righe non si ancora niente — la verifica di
+# fondatezza le boccerebbe quasi sempre.
+#
+# SearXNG trova gli indirizzi. Ospitato in proprio, **Firecrawl non sa
+# cercare**: senza `SEARXNG_ENDPOINT` l'endpoint di ricerca risponde «nessun
+# risultato» per sempre, senza errori. È il modo in cui un'installazione
+# sembra funzionare e non funziona.
+#
+# Nessuno dei sei porta l'etichetta `personalities/esposto`: il gateway non
+# li raggiunge. Ci parla solo chi sta nello spazio dei nomi, ed è per questo
+# che Firecrawl può stare senza autenticazione.
+#
+# **Il Secret `ricerca-segreti`** lo fornisce l'overlay, con
+# `POSTGRES_PASSWORD` e `SEARXNG_SECRET`. Vedi `ricerca.env.example`.
+#
+# **Le immagini sono fissate al digest** perché Firecrawl pubblica solo
+# `latest`: senza, un rilascio qualunque porterebbe una versione nuova di un
+# servizio di terze parti senza che nessuno l'abbia deciso. Per aggiornarle,
+# `docker manifest inspect -v ghcr.io/firecrawl/firecrawl:latest` e si
+# sostituisce il digest qui dentro.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - searxng.yaml
+  - firecrawl.yaml
+  - supporti.yaml
+
+configMapGenerator:
+  - name: searxng-configurazione
+    files:
+      - settings.yml=../../searxng/settings.yml

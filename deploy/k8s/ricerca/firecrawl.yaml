@@ -1,0 +1,184 @@
+# Firecrawl: prende le pagine e le restituisce ripulite in markdown.
+#
+# Due container, e non è una scelta nostra: l'API e i suoi worker girano
+# insieme (`harness.js --start-docker` li avvia tutti e tre nello stesso
+# processo, sulle porte 3002, 3004 e 3005), il browser senza schermo sta a
+# parte perché Chromium ha appetiti diversi e va potuto riavviare da solo.
+#
+# **Non porta l'etichetta `personalities/esposto`**: il gateway non lo
+# raggiunge, e dall'esterno non esiste. Ci parla solo chi sta nello spazio dei
+# nomi, ed è la ragione per cui può stare senza autenticazione.
+apiVersion: v1
+kind: Service
+metadata:
+  name: firecrawl
+spec:
+  selector:
+    app.kubernetes.io/name: firecrawl
+  ports:
+    - name: http
+      port: 3002
+      targetPort: 3002
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: playwright-ricerca
+spec:
+  selector:
+    app.kubernetes.io/name: playwright-ricerca
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: playwright-ricerca
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: playwright-ricerca
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: playwright-ricerca
+    spec:
+      containers:
+        - name: playwright
+          image: ghcr.io/firecrawl/playwright-service@sha256:5cd4c2590eebcb8e0932553187d36ab7e76249165712b2bdbae6438b0b033d40
+          env:
+            - name: PORT
+              value: "3000"
+            # Immagini, video e font non servono a estrarre testo, e sono la
+            # maggior parte dei byte di una pagina: bloccarli è la singola
+            # impostazione che più accorcia una scrape.
+            - name: BLOCK_MEDIA
+              value: "true"
+            - name: MAX_CONCURRENT_PAGES
+              value: "4"
+          ports:
+            - containerPort: 3000
+          resources:
+            # Chromium non è economico: sotto il mezzo giga si riavvia a metà
+            # pagina, e il fallimento somiglia a un sito lento.
+            requests: {cpu: 200m, memory: 512Mi}
+            limits: {memory: 2Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - name: cache
+              mountPath: /tmp/.cache
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: cache
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: firecrawl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: firecrawl
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: firecrawl
+    spec:
+      containers:
+        - name: firecrawl
+          image: ghcr.io/firecrawl/firecrawl@sha256:5a1c33ee0456e7af347e454fdd1cf819ad30bedaf5842b796739161de983b48b
+          command: ["node", "dist/src/harness.js", "--start-docker"]
+          env:
+            - name: HOST
+              value: "0.0.0.0"
+            - name: PORT
+              value: "3002"
+            - name: ENV
+              value: local
+            # Nessuna chiave: chi raggiunge il servizio lo usa. Regge perché
+            # a raggiungerlo può essere solo chi sta nello spazio dei nomi —
+            # l'autorizzazione di Istio nega tutto il resto, e il gateway non
+            # ha una rotta verso qui. Se un giorno questo servizio venisse
+            # esposto, questa riga diventerebbe il difetto.
+            - name: USE_DB_AUTHENTICATION
+              value: "false"
+            - name: REDIS_URL
+              value: redis://redis-ricerca:6379
+            - name: REDIS_RATE_LIMIT_URL
+              value: redis://redis-ricerca:6379
+            - name: PLAYWRIGHT_MICROSERVICE_URL
+              value: http://playwright-ricerca:3000/scrape
+            - name: NUQ_RABBITMQ_URL
+              value: amqp://rabbitmq-ricerca:5672
+            - name: POSTGRES_HOST
+              value: nuq-postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_DB
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: ricerca-segreti, key: POSTGRES_PASSWORD}
+            # Senza questo l'endpoint di ricerca risponde «nessun risultato»
+            # per sempre, senza errori: è il modo in cui un'installazione
+            # sembra funzionare e non funziona.
+            - name: SEARXNG_ENDPOINT
+              value: http://searxng:8080
+            # **Uno, non quattro.** Il container avvia un processo Node per
+            # worker più quattro di servizio, e ciascuno parte da due o
+            # trecento megabyte: con quattro worker erano dieci processi, e
+            # il container moriva per esaurimento della memoria tre secondi
+            # dopo l'avvio — un OOMKilled che nei log somiglia a un crash
+            # dell'applicazione. Una ricerca ogni tanto non ha bisogno di
+            # parallelismo; si alza insieme al limite di memoria qui sotto.
+            - name: NUM_WORKERS_PER_QUEUE
+              value: "1"
+            - name: CRAWL_CONCURRENT_REQUESTS
+              value: "4"
+            - name: MAX_CONCURRENT_JOBS
+              value: "2"
+            - name: BROWSER_POOL_SIZE
+              value: "2"
+            - name: LOGGING_LEVEL
+              value: info
+          ports:
+            - containerPort: 3002
+              name: http
+          readinessProbe:
+            httpGet: {path: /, port: 3002}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet: {path: /, port: 3002}
+            initialDelaySeconds: 90
+            periodSeconds: 30
+          resources:
+            # Misurato: con un worker si assesta sotto il giga e mezzo, e
+            # sotto i due muore all'avvio.
+            requests: {cpu: 300m, memory: 768Mi}
+            limits: {memory: 4Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
