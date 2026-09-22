@@ -24,3 +24,10 @@ __pycache__/
 # I file caricati dalla console in attesa del worker: copie di documenti
 # altrui, non sorgenti del progetto.
 data/caricamenti/
+
+# I segreti degli ambienti Kubernetes: si generano dagli esempi, non si committano.
+deploy/k8s/overlays/*/segreti.env
+deploy/k8s/overlays/*/keycloak.env
+
+# Il kubeconfig del cluster di prova locale.
+deploy/k8s/.kube-locale*.yaml

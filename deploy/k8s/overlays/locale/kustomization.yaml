@@ -1,0 +1,92 @@
+# La prova in locale: la stessa piattaforma di produzione, su un k3s dentro
+# Docker, con le immagini costruite sulla macchina. Vedi deploy/k8s/README.md,
+# «Provare in locale».
+#
+# Cambia solo ciò che in locale non c'è: il registro (le immagini si
+# importano nel k3s), il certificato (HTTP soltanto), lo storage condiviso
+# (un nodo solo, ReadWriteOnce basta), le dimensioni. Tutto il resto — Istio,
+# mTLS, autorizzazioni, migrazioni nell'initContainer, `environment: prod` —
+# è quello vero, perché è quello che si vuole provare.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: personalities
+
+resources:
+  - ../../base
+  - ../produzione/spazio-dei-nomi.yaml
+  - domini.yaml
+
+components:
+  - ../../istio
+
+images:
+  - name: persona-api
+    newTag: locale
+  - name: persona-worker
+    newTag: locale
+  - name: persona-worker-gpu
+    newTag: locale
+  - name: persona-web
+    newTag: locale
+  - name: persona-admin
+    newTag: locale
+
+configMapGenerator:
+  - name: keycloak-realm
+    files:
+      - realm.json=../../../keycloak/realm-personalities.prod.json
+
+# Valori di prova, validi solo su questo cluster usa-e-getta.
+secretGenerator:
+  - name: persona-segreti
+    literals:
+      - POSTGRES_PASSWORD=locale-postgres
+      - PERSONA_DATABASE_URL=postgresql+psycopg://persona:locale-postgres@postgres:5432/persona
+      - KEYCLOAK_DB_PASSWORD=locale-keycloak
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=locale-admin
+  - name: keycloak-realm-segreti
+    literals:
+      - KC_API_CLIENT_SECRET=locale-segreto-api
+
+patches:
+  # Solo HTTP: in locale non c'è un certificato.
+  - target: {kind: Gateway, name: personalities}
+    patch: |-
+      - op: replace
+        path: /spec/servers
+        value:
+          - port: {number: 80, name: http, protocol: HTTP}
+            hosts: [DOMINIO_WEB, DOMINIO_ADMIN, DOMINIO_API, DOMINIO_AUTH]
+  # Un nodo solo: `local-path` di k3s, ReadWriteOnce.
+  - target: {kind: PersistentVolumeClaim, name: caricamenti}
+    patch: |-
+      - op: replace
+        path: /spec/accessModes
+        value: [ReadWriteOnce]
+  # Una replica per servizio: qui si prova che parte, non che regge.
+  - target: {kind: HorizontalPodAutoscaler}
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+  - target: {kind: Deployment, name: "api|web"}
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  # Dimensioni da portatile: le richieste di produzione, su un k3s dentro
+  # Docker Desktop, lascerebbero pod in attesa di risorse che non ci sono.
+  - target: {kind: StatefulSet, name: postgres}
+    patch: |-
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 2Gi
+  - target: {kind: PersistentVolumeClaim, name: artefatti}
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 1Gi
+
+replacements:
+  - path: ../../istio/sostituzioni-domini.yaml

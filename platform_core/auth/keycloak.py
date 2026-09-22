@@ -97,7 +97,11 @@ class JwksCache:
 
     @property
     def issuer(self) -> str:
-        base = self._settings.keycloak_url.rstrip("/")
+        # Nel cluster le chiavi si leggono dal servizio interno, ma i token
+        # portano l'indirizzo pubblico con cui il browser ha parlato a
+        # Keycloak: sono due indirizzi, e confonderli farebbe rifiutare ogni
+        # token con «emittente non valido».
+        base = (self._settings.keycloak_issuer_url or self._settings.keycloak_url).rstrip("/")
         return f"{base}/realms/{self._settings.keycloak_realm}"
 
     def key_for(self, kid: str, *, allow_refresh: bool = True) -> Dict[str, Any]:

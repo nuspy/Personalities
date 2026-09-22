@@ -25,6 +25,7 @@ from platform_core.domain.models import Conversation, Message
 from platform_core.memory.store import MemoriaPiena, MemoryStore
 
 from .conftest import richiede_database
+from .test_retrieval import EmbedderFinto
 from .test_billing_api import ModelloBreve, piani  # noqa: F401
 from .test_chat_personalita import client, embedder, installa, personalita  # noqa: F401
 
@@ -272,7 +273,7 @@ class TestEstrazioneNellaPassata:
             session.add(Message(conversation_id=c.id, role=ruolo, content=testo, created_at=utcnow()))
         await session.commit()
 
-        esito = await estrai_memorie(provider=ModelloEstrattore(), embedder=None)
+        esito = await estrai_memorie(provider=ModelloEstrattore(), embedder=EmbedderFinto())
 
         assert esito.conversazioni_chiuse == 1
         assert esito.memorie_estratte == 2
@@ -297,8 +298,8 @@ class TestEstrazioneNellaPassata:
         await session.commit()
 
         modello = ModelloEstrattore()
-        await estrai_memorie(provider=modello, embedder=None)
-        seconda = await estrai_memorie(provider=modello, embedder=None)
+        await estrai_memorie(provider=modello, embedder=EmbedderFinto())
+        seconda = await estrai_memorie(provider=modello, embedder=EmbedderFinto())
 
         assert seconda.conversazioni_chiuse == 0
 
@@ -320,7 +321,7 @@ class TestEstrazioneNellaPassata:
             session.add(Message(conversation_id=c.id, role=ruolo, content=testo, created_at=utcnow()))
         await session.commit()
 
-        esito = await estrai_memorie(provider=ModelloEstrattore(), embedder=None)
+        esito = await estrai_memorie(provider=ModelloEstrattore(), embedder=EmbedderFinto())
 
         assert esito.conversazioni_chiuse == 1
 
@@ -337,7 +338,7 @@ class TestEstrazioneNellaPassata:
         breve.last_message_at = utcnow() - timedelta(hours=3)
         await session.commit()
 
-        await estrai_memorie(limite=1, provider=ModelloEstrattore(), embedder=None)
+        await estrai_memorie(limite=1, provider=ModelloEstrattore(), embedder=EmbedderFinto())
 
         piena = await _conversazione(session, utente)
         piena.last_message_at = utcnow() - timedelta(hours=2)
@@ -350,7 +351,7 @@ class TestEstrazioneNellaPassata:
 
         # Un solo posto per passata: se la breve lo riprendesse, la piena
         # non verrebbe mai estratta.
-        seconda = await estrai_memorie(limite=1, provider=ModelloEstrattore(), embedder=None)
+        seconda = await estrai_memorie(limite=1, provider=ModelloEstrattore(), embedder=EmbedderFinto())
 
         assert seconda.conversazioni_chiuse == 1
 
@@ -369,7 +370,7 @@ class TestEstrazioneNellaPassata:
             session.add(Message(conversation_id=c.id, role=ruolo, content=testo, created_at=utcnow()))
         await session.commit()
         modello = ModelloEstrattore()
-        await estrai_memorie(provider=modello, embedder=None)
+        await estrai_memorie(provider=modello, embedder=EmbedderFinto())
 
         # L'estrazione di ore fa, poi di nuovo messaggi e di nuovo silenzio.
         await session.refresh(c)
@@ -378,6 +379,6 @@ class TestEstrazioneNellaPassata:
         c.last_message_at = utcnow() - timedelta(hours=1)
         await session.commit()
 
-        seconda = await estrai_memorie(provider=modello, embedder=None)
+        seconda = await estrai_memorie(provider=modello, embedder=EmbedderFinto())
 
         assert seconda.conversazioni_chiuse == 1

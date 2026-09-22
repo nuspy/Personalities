@@ -718,10 +718,10 @@
       "alwaysDisplayInConsole": false,
       "clientAuthenticatorType": "client-secret",
       "redirectUris": [
-        "https://admin.personalities.tadamoo.com/*"
+        "${KC_URL_ADMIN}/*"
       ],
       "webOrigins": [
-        "https://admin.personalities.tadamoo.com"
+        "${KC_URL_ADMIN}"
       ],
       "notBefore": 0,
       "bearerOnly": false,
@@ -858,10 +858,10 @@
       "alwaysDisplayInConsole": false,
       "clientAuthenticatorType": "client-secret",
       "redirectUris": [
-        "https://personalities.tadamoo.com/*"
+        "${KC_URL_WEB}/*"
       ],
       "webOrigins": [
-        "https://personalities.tadamoo.com"
+        "${KC_URL_WEB}"
       ],
       "notBefore": 0,
       "bearerOnly": false,

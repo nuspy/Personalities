@@ -1,0 +1,13 @@
+# Le tracce dei proxy, oltre a quelle delle applicazioni: il tempo passato
+# nella rete fra un servizio e l'altro compare nella stessa traccia della
+# richiesta. Il fornitore `otel` è dichiarato nell'installazione di Istio
+# (istio-installazione.yaml) e punta al collector di questo spazio dei nomi.
+apiVersion: telemetry.istio.io/v1
+kind: Telemetry
+metadata:
+  name: tracce
+spec:
+  tracing:
+    - providers:
+        - name: otel
+      randomSamplingPercentage: 10

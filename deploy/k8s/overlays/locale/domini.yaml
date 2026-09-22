@@ -1,0 +1,20 @@
+# `localtest.me` e i suoi sottodomini risolvono tutti a 127.0.0.1: i domini
+# si comportano come quelli veri senza toccare il file hosts. Il gateway si
+# raggiunge con un port-forward sulla 8088 (mai la 8000: è di altri progetti).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: domini
+  annotations:
+    config.kubernetes.io/local-config: "true"
+data:
+  web: personalities.localtest.me
+  admin: admin.personalities.localtest.me
+  api: api.personalities.localtest.me
+  auth: auth.personalities.localtest.me
+  web_url: http://personalities.localtest.me:8088
+  admin_url: http://admin.personalities.localtest.me:8088
+  api_url: http://api.personalities.localtest.me:8088
+  auth_url: http://auth.personalities.localtest.me:8088
+  cors: '["http://personalities.localtest.me:8088","http://admin.personalities.localtest.me:8088"]'
+  spazio_dei_nomi: personalities

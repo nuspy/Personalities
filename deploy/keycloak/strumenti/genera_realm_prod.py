@@ -47,10 +47,14 @@ def realm_di_partenza() -> dict:
     prod = copy.deepcopy(json.loads(SVILUPPO.read_text(encoding="utf-8")))
     prod.pop("users", None)
     prod["clients"] = [c for c in prod["clients"] if c["clientId"] != "persona-test"]
+    # Gli indirizzi delle due interfacce dall'ambiente: lo stesso realm serve
+    # la produzione e il cluster di prova locale, che hanno domini diversi.
+    # Scritti a mano, il cluster locale non potrebbe accedere dal browser.
+    indirizzi = {"persona-frontend": "${KC_URL_WEB}", "persona-admin": "${KC_URL_ADMIN}"}
     for c in prod["clients"]:
-        for campo in ("redirectUris", "webOrigins"):
-            if campo in c:
-                c[campo] = [u for u in c[campo] if "localhost" not in u]
+        if c["clientId"] in indirizzi:
+            c["redirectUris"] = [f"{indirizzi[c['clientId']]}/*"]
+            c["webOrigins"] = [indirizzi[c["clientId"]]]
     prod.update({
         "verifyEmail": True,
         "sslRequired": "external",

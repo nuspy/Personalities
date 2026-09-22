@@ -208,3 +208,37 @@ class TestPrincipal:
 
     def test_senza_ruoli_non_e_amministratore(self):
         assert not Principal(subject="x").is_admin
+
+
+class TestEmittentePubblico:
+    """Nel cluster le chiavi arrivano dal servizio interno, i token portano il dominio pubblico."""
+
+    PUBBLICO = "https://auth.personalities.example"
+
+    def _verificatore(self, jwks, **impostazioni) -> TokenVerifier:
+        settings = Settings(
+            keycloak_url=BASE, keycloak_realm=REALM, keycloak_client_id="persona-api",
+            keycloak_accepted_audiences=("persona-frontend",), **impostazioni,
+        )
+        cache = JwksCache(settings)
+        cache._keys = {k["kid"]: k for k in jwks["keys"]}
+        cache._fetched_at = time.time()
+        return TokenVerifier(settings, cache)
+
+    def test_le_chiavi_dal_servizio_interno(self, jwks):
+        cache = self._verificatore(jwks, keycloak_issuer_url=self.PUBBLICO)._jwks
+        assert cache.jwks_url.startswith(BASE)
+        assert cache.issuer == f"{self.PUBBLICO}/realms/{REALM}"
+
+    def test_il_token_col_dominio_pubblico_passa(self, jwks, pem):
+        verificatore = self._verificatore(jwks, keycloak_issuer_url=self.PUBBLICO)
+        principale = verificatore.verify(emetti(pem, iss=f"{self.PUBBLICO}/realms/{REALM}"))
+        assert principale.subject == "abc-123"
+
+    def test_quello_con_l_indirizzo_interno_no(self, jwks, pem):
+        """Un token emesso chiamando Keycloak per il nome interno non è quello
+        che il browser ha ricevuto: accettarli entrambi raddoppierebbe gli
+        emittenti di cui fidarsi."""
+        verificatore = self._verificatore(jwks, keycloak_issuer_url=self.PUBBLICO)
+        with pytest.raises(AuthenticationError):
+            verificatore.verify(emetti(pem))

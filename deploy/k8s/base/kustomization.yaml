@@ -1,0 +1,68 @@
+# La piattaforma, senza ambiente: le immagini, i domini, i segreti e le
+# dimensioni li mette ciascun overlay. Nessuno applica questa cartella da
+# sola — manca la configurazione — ed è voluto: un `apply` della base
+# creerebbe un servizio che non sa a quale dominio rispondere.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: personalities
+    includeSelectors: false
+
+resources:
+  - postgres.yaml
+  - redis.yaml
+  - keycloak.yaml
+  - api.yaml
+  - worker-cpu.yaml
+  - worker-gpu.yaml
+  - web.yaml
+  - admin.yaml
+  - manutenzione.yaml
+  - volumi.yaml
+  - osservabilita.yaml
+
+# I nomi con cui i manifest chiamano le immagini: ogni overlay li traduce nel
+# registro e nel tag che usa.
+images:
+  - name: persona-api
+  - name: persona-worker
+  - name: persona-worker-gpu
+  - name: persona-web
+  - name: persona-admin
+
+# Generati e non scritti come risorse: il nome porta l'hash del contenuto, e
+# cambiare una variabile fa ripartire i pod che la usano invece di lasciarli
+# con il valore vecchio fino al prossimo riavvio casuale.
+configMapGenerator:
+  - name: persona-config
+    literals:
+      - PERSONA_ENVIRONMENT=prod
+      - PERSONA_REDIS_URL=redis://redis:6379/0
+      # Le chiavi dal servizio interno; l'emittente dei token è il dominio
+      # pubblico, quello che il browser ha usato per entrare. I DOMINIO_*
+      # li sostituisce l'overlay dai suoi `domini`.
+      - PERSONA_KEYCLOAK_URL=http://keycloak:8080
+      - PERSONA_KEYCLOAK_ISSUER_URL=DOMINIO_AUTH_URL
+      - PERSONA_KEYCLOAK_REALM=personalities
+      - PERSONA_API_PUBLIC_URL=DOMINIO_API_URL
+      - PERSONA_WEB_PUBLIC_URL=DOMINIO_WEB_URL
+      - PERSONA_CORS_ORIGINS=DOMINI_CORS
+      - PERSONA_OTLP_ENDPOINT=http://otel-collector:4318
+      # Finché il fornitore vero non è scelto: piani gratuiti sì, a
+      # pagamento con un 503 che lo dice. Con `mock` in produzione l'API
+      # non parte.
+      - PERSONA_BILLING_PROVIDER=disattivato
+      - PERSONA_UPLOAD_DIR=/var/lib/persona/caricamenti
+      - PERSONA_LOG_LEVEL=INFO
+      - PERSONA_TTS_ENABLED=false
+  # L'indirizzo pubblico di Keycloak: quello che scrive nei token e nelle
+  # pagine di accesso.
+  - name: keycloak-hostname
+    literals:
+      - KC_HOSTNAME=DOMINIO_AUTH_URL
+      # Gli indirizzi di ritorno dei client del realm: senza, Keycloak
+      # rifiuterebbe il ritorno dal login verso i domini di questo ambiente.
+      - KC_URL_WEB=DOMINIO_WEB_URL
+      - KC_URL_ADMIN=DOMINIO_ADMIN_URL

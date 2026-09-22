@@ -1,0 +1,51 @@
+# mTLS obbligatorio: dentro lo spazio dei nomi nessuno parla in chiaro, e un
+# pod senza identità della mesh non raggiunge nessun servizio.
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: predefinita
+spec:
+  mtls:
+    mode: STRICT
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: mtls-interno
+spec:
+  host: "*.svc.cluster.local"
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+---
+# Chi può parlare con chi. Con una politica ALLOW presente, tutto ciò che
+# non è elencato è negato: i servizi dello spazio dei nomi fra loro, e il
+# gateway verso i quattro esposti. Postgres, Redis, Jaeger e il collector non
+# sono raggiungibili da fuori nemmeno con un errore di instradamento.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: interno
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: [SPAZIO_DEI_NOMI]
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: dal-gateway
+spec:
+  # Solo `matchLabels`: il selettore di Istio non ammette espressioni. I
+  # quattro servizi raggiungibili da fuori portano l'etichetta
+  # `personalities/esposto` nei loro pod.
+  selector:
+    matchLabels:
+      personalities/esposto: "true"
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"]

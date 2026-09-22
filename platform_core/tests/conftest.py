@@ -25,6 +25,25 @@ from platform_core.auth.keycloak import Principal
 from platform_core.domain.base import Base
 from platform_core.domain.models import User
 
+@pytest.fixture(autouse=True)
+def niente_modelli_veri(monkeypatch):
+    """Durante le prove i modelli stanno su una porta morta.
+
+    Una prova che per sbaglio ricade sul fornitore vero — un `embedder=None`,
+    un provider non sostituito — altrimenti chiamerebbe LM Studio: passerebbe
+    o fallirebbe secondo che un modello sia caricato, e caricarlo occupa la
+    GPU, che su questa macchina è condivisa con altri progetti. Con la porta 9
+    la chiamata fallisce subito e dice dove.
+    """
+    from platform_core.settings import get_settings
+
+    for variabile in ("PERSONA_LLM_BASE_URL", "PERSONA_EMBEDDING_BASE_URL", "PERSONA_TTS_BASE_URL"):
+        monkeypatch.setenv(variabile, "http://127.0.0.1:9/v1")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 #: Un database separato da quello di sviluppo: le prove creano e cancellano
 #: righe senza riguardo, e farlo su dati veri è un incidente che capita una
 #: volta sola.

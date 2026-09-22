@@ -20,7 +20,7 @@ from logging.config import fileConfig
 from pathlib import Path
 
 from alembic import context
-from sqlalchemy import create_engine, pool
+from sqlalchemy import create_engine, pool, text
 
 # La radice del progetto, perché `alembic` può essere invocato da altrove.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -77,9 +77,27 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+#: La chiave del lock consultivo con cui le migrazioni si mettono in fila.
+#: Un numero qualunque, purché sempre lo stesso: è il nome della fila.
+CHIAVE_LOCK_MIGRAZIONI = 7_321_004_811
+
+
 def run_migrations_online() -> None:
     engine = create_engine(database_url(), poolclass=pool.NullPool)
     with engine.connect() as connection:
+        # In un cluster più pod partono insieme, e ciascuno esegue le
+        # migrazioni prima di servire: due `upgrade` concorrenti proverebbero
+        # a creare le stesse tabelle, e il secondo fallirebbe a metà. Con il
+        # lock il secondo aspetta, poi trova lo schema aggiornato e non fa
+        # nulla. È un lock di sessione: sopravvive alla transazione delle
+        # migrazioni, e si scioglie al più tardi con la connessione.
+        postgres = connection.dialect.name == "postgresql"
+        if postgres:
+            connection.execute(text("SELECT pg_advisory_lock(:k)"), {"k": CHIAVE_LOCK_MIGRAZIONI})
+            # Chiude la transazione aperta implicitamente dalla SELECT:
+            # altrimenti Alembic la troverebbe già iniziata e non farebbe il
+            # commit delle migrazioni.
+            connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
@@ -92,6 +110,9 @@ def run_migrations_online() -> None:
         )
         with context.begin_transaction():
             context.run_migrations()
+        if postgres:
+            connection.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": CHIAVE_LOCK_MIGRAZIONI})
+            connection.commit()
     engine.dispose()
 
 

@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     keycloak_url: str = "http://localhost:8080"
     keycloak_realm: str = "personalities"
     keycloak_client_id: str = "persona-api"
+    #: L'indirizzo pubblico di Keycloak, quello scritto nel campo `iss` dei
+    #: token. Vuoto vale `keycloak_url`, come in sviluppo; in un cluster
+    #: `keycloak_url` e' il servizio interno da cui si leggono le chiavi, e
+    #: questo e' il dominio che vede il browser.
+    keycloak_issuer_url: str = ""
     #: Altri client del realm i cui token questa API accetta. Il frontend ne fa
     #: parte: il token che riceve e' emesso per `persona-frontend`, e se non
     #: fosse elencato qui ogni richiesta dell'interfaccia verrebbe respinta —

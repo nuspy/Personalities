@@ -70,6 +70,7 @@ file non contiene segreti.
 
 | Variabile | A cosa serve |
 |---|---|
+| `KC_URL_WEB`, `KC_URL_ADMIN` | gli indirizzi del sito e della console, per il ritorno dal login (in Kubernetes li mette l'overlay) |
 | `KC_API_CLIENT_SECRET` | segreto del client confidenziale `persona-api` |
 | `KC_SMTP_HOST`, `KC_SMTP_PORT`, `KC_SMTP_FROM`, `KC_SMTP_USER`, `KC_SMTP_PASSWORD` | invio delle email di verifica e di recupero |
 | `KC_GOOGLE_ENABLED`, `KC_GOOGLE_CLIENT_ID`, `KC_GOOGLE_CLIENT_SECRET` | accesso con Google |

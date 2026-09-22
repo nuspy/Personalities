@@ -1,0 +1,21 @@
+# I domini dell'ambiente, in un posto solo. Non finisce nel cluster
+# (`local-config`): kustomize lo legge per sostituire i segnaposto nel
+# gateway, nell'instradamento, negli indirizzi pubblici dell'API e di
+# Keycloak.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: domini
+  annotations:
+    config.kubernetes.io/local-config: "true"
+data:
+  web: personalities.tadamoo.com
+  admin: admin.personalities.tadamoo.com
+  api: api.personalities.tadamoo.com
+  auth: auth.personalities.tadamoo.com
+  web_url: https://personalities.tadamoo.com
+  admin_url: https://admin.personalities.tadamoo.com
+  api_url: https://api.personalities.tadamoo.com
+  auth_url: https://auth.personalities.tadamoo.com
+  cors: '["https://personalities.tadamoo.com","https://admin.personalities.tadamoo.com"]'
+  spazio_dei_nomi: personalities

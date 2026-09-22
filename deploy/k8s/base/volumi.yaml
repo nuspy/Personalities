@@ -1,0 +1,27 @@
+# I file caricati dalla console, fra l'API che li riceve e il worker che li
+# legge. Stanno su pod diversi: serve un volume che entrambi montino.
+#
+# ReadWriteMany dove lo storage lo consente (NFS, Longhorn, CephFS); su un
+# k3s a nodo singolo `local-path` offre solo ReadWriteOnce, che basta finché
+# API e worker stanno sullo stesso nodo — l'overlay locale fa così.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: caricamenti
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 20Gi
+---
+# Gli artefatti degli addestramenti: adapter LoRA e GGUF, scritti dal worker
+# GPU e letti da chi serve i modelli.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: artefatti
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 50Gi

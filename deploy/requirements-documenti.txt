@@ -1,0 +1,15 @@
+# I decoder dei documenti, dalla pipeline storica. Servono al worker che li
+# legge e anche all'API, che da loro sa quali formati accettare: senza, l'API
+# conoscerebbe solo il testo semplice e rifiuterebbe ogni PDF con un 415.
+PyMuPDF>=1.23
+python-docx>=1.0
+ebooklib>=0.18
+beautifulsoup4>=4.12
+lxml>=4.9
+olefile>=0.46
+striprtf>=0.0.26
+odfpy>=1.4.1
+charset-normalizer>=3.0
+# Certificati di sistema per le connessioni in uscita, dove un proxy TLS
+# rifirma il traffico: il package li aggancia al proprio import.
+truststore>=0.8

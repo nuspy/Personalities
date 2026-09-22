@@ -1,0 +1,54 @@
+# Le due interfacce, il sito e la console, dalla stessa ricetta.
+#
+#   docker build -f deploy/Dockerfile.next --build-arg APP=frontend \
+#       --build-arg NEXT_PUBLIC_API_URL=https://api.personalities.tadamoo.com \
+#       --build-arg NEXT_PUBLIC_KEYCLOAK_URL=https://auth.personalities.tadamoo.com \
+#       -t persona-web .
+#   docker build -f deploy/Dockerfile.next --build-arg APP=admin ... -t persona-admin .
+#
+# **Gli indirizzi si decidono alla build, non all'avvio.** Next scrive le
+# variabili `NEXT_PUBLIC_*` dentro il JavaScript che manda al browser: il
+# browser non vede l'ambiente del container. Un'immagine costruita per un
+# dominio parla con quel dominio; per un altro si ricostruisce.
+
+ARG NODE=node:24-alpine
+
+FROM ${NODE} AS build
+ARG APP
+ARG NEXT_PUBLIC_API_URL=http://localhost:8100
+ARG NEXT_PUBLIC_KEYCLOAK_URL=http://localhost:8080
+ARG NEXT_PUBLIC_KEYCLOAK_REALM=personalities
+ARG NEXT_PUBLIC_KEYCLOAK_CLIENT_ID
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
+    NEXT_PUBLIC_KEYCLOAK_URL=${NEXT_PUBLIC_KEYCLOAK_URL} \
+    NEXT_PUBLIC_KEYCLOAK_REALM=${NEXT_PUBLIC_KEYCLOAK_REALM} \
+    NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=${NEXT_PUBLIC_KEYCLOAK_CLIENT_ID}
+
+WORKDIR /src
+COPY ${APP}/package.json ${APP}/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY ${APP}/ ./
+# Il client di Keycloak ha un nome per interfaccia: se non lo si passa, lo si
+# deduce dall'app, perché un sito costruito col client della console
+# riceverebbe token che l'API rifiuta.
+RUN if [ -z "$NEXT_PUBLIC_KEYCLOAK_CLIENT_ID" ]; then \
+        if [ "${APP}" = "admin" ]; then export NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=persona-admin; \
+        else export NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=persona-frontend; fi; \
+    fi \
+    && mkdir -p public \
+    && npm run build
+
+FROM ${NODE} AS esecuzione
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    HOSTNAME=0.0.0.0 \
+    PORT=3000
+WORKDIR /app
+# Solo ciò che `standalone` ha tracciato: server, moduli usati, risorse.
+COPY --from=build --chown=node:node /src/.next/standalone ./
+COPY --from=build --chown=node:node /src/.next/static ./.next/static
+COPY --from=build --chown=node:node /src/public ./public
+USER node
+EXPOSE 3000
+CMD ["node", "server.js"]

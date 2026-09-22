@@ -1,0 +1,22 @@
+# Istio come componente: lo includono gli overlay che girano nella mesh.
+#
+# Cosa fa, e solo quello (vedi il piano: mTLS e tracciamento, il resto non ora):
+# - gateway e instradamento dei quattro domini;
+# - mTLS obbligatorio fra tutti i servizi dello spazio dei nomi;
+# - chi può parlare con chi: dall'esterno solo il gateway, dentro solo lo
+#   spazio dei nomi;
+# - tracce inviate al collector.
+#
+# Richiede Istio installato con i sidecar nativi (ENABLE_NATIVE_SIDECARS): le
+# migrazioni girano in un initContainer e la manutenzione in un CronJob, e con
+# i sidecar classici né l'uno né l'altro raggiungerebbero Postgres in mTLS —
+# l'initContainer parte prima del proxy, il Job non finirebbe mai perché il
+# proxy resta vivo. Vedi istio-installazione.yaml.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - gateway.yaml
+  - instradamento.yaml
+  - sicurezza.yaml
+  - telemetria.yaml

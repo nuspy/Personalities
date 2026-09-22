@@ -1,0 +1,101 @@
+# PostgreSQL con pgvector: dati, vettori e — in un database a parte — Keycloak.
+# Uno solo, con un solo backup: i vettori stanno nella stessa transazione dei
+# dati che descrivono, ed è la ragione per cui non c'è un secondo datastore.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-inizializzazione
+data:
+  01-estensioni.sql: |
+    CREATE EXTENSION IF NOT EXISTS vector;
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+  02-keycloak.sh: |
+    #!/bin/sh
+    # Keycloak in un database suo, con un utente suo: una falla in un
+    # servizio non deve dare le chiavi dei dati dell'altro.
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
+      -v password="$KEYCLOAK_DB_PASSWORD" <<'SQL'
+    CREATE USER keycloak WITH PASSWORD :'password';
+    CREATE DATABASE keycloak OWNER keycloak;
+    SQL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: tcp-postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+    spec:
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg17
+          env:
+            - name: POSTGRES_USER
+              value: persona
+            - name: POSTGRES_DB
+              value: persona
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: persona-segreti, key: POSTGRES_PASSWORD}
+            - name: KEYCLOAK_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: persona-segreti, key: KEYCLOAK_DB_PASSWORD}
+            # Una sottocartella del volume e non la radice: su molti
+            # provisioner la radice contiene `lost+found`, e initdb rifiuta
+            # una cartella non vuota.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "persona", "-d", "persona"]
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "persona", "-d", "persona"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {memory: 2Gi}
+          volumeMounts:
+            - name: dati
+              mountPath: /var/lib/postgresql/data
+            - name: inizializzazione
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: inizializzazione
+          configMap:
+            name: postgres-inizializzazione
+  volumeClaimTemplates:
+    - metadata:
+        name: dati
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 20Gi

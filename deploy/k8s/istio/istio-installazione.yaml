@@ -1,0 +1,28 @@
+# L'installazione di Istio che i manifest si aspettano. Non fa parte del
+# componente: si applica una volta per cluster, con
+#
+#   istioctl install -f deploy/k8s/istio/istio-installazione.yaml
+#
+# Due scelte, entrambe necessarie:
+# - i sidecar nativi (Kubernetes >= 1.29): il proxy parte come initContainer
+#   con restartPolicy Always, quindi prima delle migrazioni e si ferma con la
+#   fine di un Job;
+# - il fornitore di tracce `otel`, verso il collector dello spazio dei nomi.
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: personalities
+  namespace: istio-system
+spec:
+  profile: default
+  meshConfig:
+    enableTracing: true
+    extensionProviders:
+      - name: otel
+        opentelemetry:
+          service: otel-collector.personalities.svc.cluster.local
+          port: 4317
+  values:
+    pilot:
+      env:
+        ENABLE_NATIVE_SIDECARS: "true"

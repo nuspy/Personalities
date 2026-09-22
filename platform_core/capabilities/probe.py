@@ -99,7 +99,10 @@ def _probe() -> HardwareCapabilities:
     reasons: Dict[str, str] = {}
 
     torch_version, has_cuda, gpu_name, vram_mb, capability = _probe_torch(reasons)
-    training_libs_ok = _probe_training_libraries(reasons)
+    # Le librerie di addestramento solo dove c'è un acceleratore: senza, non
+    # si addestra comunque, e importare transformers e peft su un nodo CPU
+    # costa secondi all'avvio e centinaia di megabyte per una risposta nota.
+    training_libs_ok = _probe_training_libraries(reasons) if has_cuda else False
 
     can_train_lora = has_cuda and training_libs_ok and vram_mb >= MIN_VRAM_LORA_MB
     if has_cuda and training_libs_ok and not can_train_lora:
@@ -109,7 +112,14 @@ def _probe() -> HardwareCapabilities:
         )
 
     can_full_finetune = can_train_lora and vram_mb >= MIN_VRAM_FINETUNE_MB
-    if can_train_lora and not can_full_finetune:
+    if not can_train_lora:
+        # Senza addestramento non c'è fine-tuning, per la stessa ragione: la
+        # console deve poterlo dire accanto al pulsante spento.
+        reasons["can_full_finetune"] = (
+            "il fine-tuning richiede ciò che manca all'addestramento: "
+            + reasons.get("can_train_lora", "addestramento non disponibile")
+        )
+    elif not can_full_finetune:
         reasons["can_full_finetune"] = (
             f"il fine-tuning completo richiede almeno "
             f"{MIN_VRAM_FINETUNE_MB / 1000:.0f} GB di memoria video, "
@@ -195,6 +205,12 @@ def _probe_training_libraries(reasons: Dict[str, str]) -> bool:
             __import__(module)
         except ImportError:
             missing.append(module)
+        except Exception as exc:  # noqa: BLE001
+            # Non solo ImportError: con CUDA presente ma nessun dispositivo
+            # visibile, peft solleva un IndexError dall'interno di torch. Il
+            # rilevamento promette di non sollevare mai — un'eccezione qui
+            # impedirebbe al worker di partire invece di dire cosa manca.
+            missing.append(f"{module} ({type(exc).__name__})")
 
     if missing:
         reasons.setdefault(

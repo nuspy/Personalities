@@ -1,0 +1,47 @@
+# Il worker con l'acceleratore: addestramento LoRA, fine-tuning, GGUF, e —
+# quando c'è — anche digestione e ingestione.
+#
+#   docker build -f deploy/Dockerfile.worker-gpu -t persona-worker-gpu .
+#
+# Immagine a parte e non uno stadio di Dockerfile.backend: la base è quella
+# CUDA di PyTorch, e porta con sé gigabyte che l'API e il worker CPU non
+# devono scaricare a ogni rilascio. Il codice è lo stesso.
+#
+# Richiede sul nodo il driver NVIDIA e il device plugin di Kubernetes; su un
+# cluster senza GPU il deployment resta a zero repliche, ed è uno stato valido.
+
+FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg git build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY deploy/requirements-backend.txt deploy/requirements-documenti.txt ./
+RUN pip install -r requirements-backend.txt -r requirements-documenti.txt \
+    && pip install "faster-whisper>=1.1" \
+       "transformers>=4.51.3,<6" "datasets>=2.16" "peft>=0.7" "trl>=0.7" \
+       "accelerate>=0.25" "bitsandbytes>=0.41" "unsloth"
+
+COPY alembic.ini ./
+COPY platform_core ./platform_core
+COPY historical_persona_pipeline ./historical_persona_pipeline
+COPY data/guards ./data/guards
+
+RUN useradd --create-home --uid 1000 persona \
+    && mkdir -p /var/lib/persona/caricamenti /var/lib/persona/modelli /app/builds \
+    && chown -R persona:persona /app /var/lib/persona
+USER persona
+
+ENV PERSONA_UPLOAD_DIR=/var/lib/persona/caricamenti \
+    HF_HOME=/var/lib/persona/modelli \
+    PERSONA_ROLE=worker-gpu
+
+CMD ["python", "-m", "platform_core.builds"]

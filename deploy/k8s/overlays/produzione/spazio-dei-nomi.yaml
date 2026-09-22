@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: personalities
+  labels:
+    # Ogni pod dello spazio dei nomi riceve il proxy di Istio.
+    istio-injection: enabled

@@ -1,0 +1,55 @@
+# Dal ConfigMap `domini` di ciascun overlay ai punti che ne dipendono. Un
+# dominio si cambia in un posto solo: gateway, instradamento, indirizzi
+# pubblici e origini consentite lo seguono.
+- source: {kind: ConfigMap, name: domini, fieldPath: data.web}
+  targets:
+    - select: {kind: Gateway, name: personalities}
+      fieldPaths: [spec.servers.*.hosts.0]
+    - select: {kind: VirtualService, name: web}
+      fieldPaths: [spec.hosts.0]
+- source: {kind: ConfigMap, name: domini, fieldPath: data.admin}
+  targets:
+    - select: {kind: Gateway, name: personalities}
+      fieldPaths: [spec.servers.*.hosts.1]
+    - select: {kind: VirtualService, name: admin}
+      fieldPaths: [spec.hosts.0]
+- source: {kind: ConfigMap, name: domini, fieldPath: data.api}
+  targets:
+    - select: {kind: Gateway, name: personalities}
+      fieldPaths: [spec.servers.*.hosts.2]
+    - select: {kind: VirtualService, name: api}
+      fieldPaths: [spec.hosts.0]
+- source: {kind: ConfigMap, name: domini, fieldPath: data.auth}
+  targets:
+    - select: {kind: Gateway, name: personalities}
+      fieldPaths: [spec.servers.*.hosts.3]
+    - select: {kind: VirtualService, name: keycloak}
+      fieldPaths: [spec.hosts.0]
+- source: {kind: ConfigMap, name: domini, fieldPath: data.auth_url}
+  targets:
+    - select: {kind: ConfigMap, name: persona-config}
+      fieldPaths: [data.PERSONA_KEYCLOAK_ISSUER_URL]
+    - select: {kind: ConfigMap, name: keycloak-hostname}
+      fieldPaths: [data.KC_HOSTNAME]
+- source: {kind: ConfigMap, name: domini, fieldPath: data.api_url}
+  targets:
+    - select: {kind: ConfigMap, name: persona-config}
+      fieldPaths: [data.PERSONA_API_PUBLIC_URL]
+- source: {kind: ConfigMap, name: domini, fieldPath: data.web_url}
+  targets:
+    - select: {kind: ConfigMap, name: persona-config}
+      fieldPaths: [data.PERSONA_WEB_PUBLIC_URL]
+    - select: {kind: ConfigMap, name: keycloak-hostname}
+      fieldPaths: [data.KC_URL_WEB]
+- source: {kind: ConfigMap, name: domini, fieldPath: data.admin_url}
+  targets:
+    - select: {kind: ConfigMap, name: keycloak-hostname}
+      fieldPaths: [data.KC_URL_ADMIN]
+- source: {kind: ConfigMap, name: domini, fieldPath: data.cors}
+  targets:
+    - select: {kind: ConfigMap, name: persona-config}
+      fieldPaths: [data.PERSONA_CORS_ORIGINS]
+- source: {kind: ConfigMap, name: domini, fieldPath: data.spazio_dei_nomi}
+  targets:
+    - select: {kind: AuthorizationPolicy, name: interno}
+      fieldPaths: [spec.rules.0.from.0.source.namespaces.0]

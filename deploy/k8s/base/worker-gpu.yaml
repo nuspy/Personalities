@@ -1,0 +1,83 @@
+# Il worker con l'acceleratore: addestramento LoRA, fine-tuning, GGUF — e,
+# quando c'è, anche digestione e ingestione, leggendo entrambe le code.
+#
+# **Zero repliche è uno stato valido.** Su un cluster senza nodi GPU la
+# piattaforma funziona in RAG puro: la console mostra gli addestramenti
+# disabilitati col motivo, e l'API risponde 409 invece di accodare lavori che
+# nessuno raccoglierebbe. Si accende portando le repliche a 1 su un cluster
+# con il driver NVIDIA e il device plugin.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-gpu
+spec:
+  replicas: 0
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: worker-gpu
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: worker-gpu
+    spec:
+      terminationGracePeriodSeconds: 3600
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: lavori
+          image: persona-worker-gpu
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "platform_core.builds"]
+          envFrom:
+            - configMapRef: {name: persona-config}
+            - secretRef: {name: persona-segreti}
+          env:
+            - name: PERSONA_ROLE
+              value: worker-gpu
+            - name: PERSONA_SERVICE_NAME
+              value: persona-worker-gpu
+          resources:
+            requests: {cpu: "2", memory: 16Gi}
+            limits:
+              memory: 48Gi
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - name: caricamenti
+              mountPath: /var/lib/persona/caricamenti
+            - name: artefatti
+              mountPath: /app/builds
+            - name: modelli
+              mountPath: /var/lib/persona/modelli
+        - name: battito
+          image: persona-worker-gpu
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "platform_core.worker", "--role", "gpu"]
+          envFrom:
+            - configMapRef: {name: persona-config}
+            - secretRef: {name: persona-segreti}
+          env:
+            - name: PERSONA_ROLE
+              value: worker-gpu
+          resources:
+            requests: {cpu: 50m, memory: 512Mi}
+            limits: {memory: 2Gi}
+      volumes:
+        - name: caricamenti
+          persistentVolumeClaim:
+            claimName: caricamenti
+        - name: artefatti
+          persistentVolumeClaim:
+            claimName: artefatti
+        - name: modelli
+          emptyDir:
+            sizeLimit: 80Gi

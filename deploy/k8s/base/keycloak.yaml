@@ -1,0 +1,98 @@
+# Keycloak in modalità di produzione (`start`), dietro il gateway che termina
+# il TLS. Il realm si importa all'avvio dal ConfigMap `keycloak-realm`, che
+# l'overlay genera da deploy/keycloak/realm-personalities.prod.json; a realm
+# già presente l'import non tocca nulla.
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+spec:
+  selector:
+    app.kubernetes.io/name: keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+spec:
+  # Una replica: più di una richiede la cache distribuita di Infinispan
+  # configurata per il cluster, che qui non serve ancora.
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        # Raggiungibile dal gateway (istio/sicurezza.yaml).
+        personalities/esposto: "true"
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.0
+          args: ["start", "--import-realm"]
+          env:
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: jdbc:postgresql://postgres:5432/keycloak
+            - name: KC_DB_USERNAME
+              value: keycloak
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: persona-segreti, key: KEYCLOAK_DB_PASSWORD}
+            # Il TLS lo termina il gateway: qui HTTP, e l'indirizzo pubblico
+            # viene da KC_HOSTNAME (nell'overlay) e dalle intestazioni del proxy.
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            # L'API legge le chiavi dal servizio interno: il canale di
+            # ritorno usa l'indirizzo con cui Keycloak viene chiamato.
+            - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+              value: "true"
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              value: admin
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: persona-segreti, key: KC_BOOTSTRAP_ADMIN_PASSWORD}
+          envFrom:
+            # I segnaposto del realm: segreto del client dell'API, SMTP,
+            # provider social. Quelli assenti prendono il valore predefinito.
+            - configMapRef:
+                name: keycloak-hostname
+            - secretRef:
+                name: keycloak-realm-segreti
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 9000
+              name: gestione
+          startupProbe:
+            httpGet: {path: /health/started, port: 9000}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health/ready, port: 9000}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health/live, port: 9000}
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 250m, memory: 768Mi}
+            limits: {memory: 1536Mi}
+          volumeMounts:
+            - name: realm
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+      volumes:
+        - name: realm
+          configMap:
+            name: keycloak-realm

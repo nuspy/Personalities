@@ -1,0 +1,10 @@
+# Il certificato del gateway, separato dal resto: vive nello spazio dei nomi
+# di Istio (lì il gateway cerca `credentialName`), e il `namespace` dell'overlay
+# lo sposterebbe altrove. Richiede cert-manager nel cluster.
+#
+#   kubectl apply -k deploy/k8s/overlays/produzione/tls
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - certificato.yaml

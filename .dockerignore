@@ -1,0 +1,22 @@
+# Il contesto di build è la radice del progetto: senza questo elenco Docker
+# spedirebbe al demone gli ambienti virtuali, i modelli e le build — gigabyte
+# che nessuna immagine usa.
+.git
+.venv
+venv
+venv_corrupt_backup
+**/__pycache__
+**/*.pyc
+**/node_modules
+**/.next
+builds
+data/caricamenti
+docs
+unsloth_compiled_cache
+_unsloth_sentencepiece_temp
+*.whl
+*.egg-info
+historical_persona_pipeline/gui
+**/.env
+**/.env.*
+!**/.env.example

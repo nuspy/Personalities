@@ -1,0 +1,72 @@
+# Un dominio per servizio.
+#
+# **Nessun nuovo tentativo verso l'API.** Istio per default ritenta una
+# richiesta fallita a livello di connessione, e per quasi tutto va bene; qui
+# no: una `POST /chat` ritentata dopo che l'API l'aveva ricevuta consumerebbe
+# i crediti due volte, e un caricamento ripetuto accoderebbe due ingestioni.
+# Il client sa ritentare da sé, e sa quando è sicuro farlo.
+#
+# **Nessun timeout sulle risposte in streaming.** Una risposta SSE resta
+# aperta finché il modello scrive: un limite fisso la troncherebbe a metà. In
+# Istio il timeout delle rotte HTTP è disattivato per default, e `0s` non è
+# ammesso: il campo semplicemente non c'è.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: api
+spec:
+  hosts: [DOMINIO_API]
+  gateways: [personalities]
+  http:
+    - route:
+        - destination:
+            host: api
+            port: {number: 8100}
+      retries:
+        attempts: 0
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: web
+spec:
+  hosts: [DOMINIO_WEB]
+  gateways: [personalities]
+  http:
+    - route:
+        - destination:
+            host: web
+            port: {number: 3000}
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: admin
+spec:
+  hosts: [DOMINIO_ADMIN]
+  gateways: [personalities]
+  http:
+    - route:
+        - destination:
+            host: admin
+            port: {number: 3000}
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: keycloak
+spec:
+  hosts: [DOMINIO_AUTH]
+  gateways: [personalities]
+  http:
+    # La console di amministrazione di Keycloak non si espone: si raggiunge
+    # con un port-forward da chi ha accesso al cluster. Dall'esterno servono
+    # soltanto i percorsi del realm.
+    - match:
+        - uri: {prefix: /admin}
+      directResponse:
+        status: 404
+    - route:
+        - destination:
+            host: keycloak
+            port: {number: 8080}

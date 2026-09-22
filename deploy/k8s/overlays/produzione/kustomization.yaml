@@ -1,0 +1,75 @@
+# Produzione: personalities.tadamoo.com, dietro Istio.
+#
+#   deploy/k8s/rilascia.sh produzione          # vedi il README
+#
+# Prima serve: i segreti in segreti.env e keycloak.env (dagli esempi .example,
+# mai nel repository), le immagini nel registro con il tag qui sotto, Istio
+# installato con deploy/k8s/istio/istio-installazione.yaml, e il certificato
+# (tls/). I domini si cambiano in domini.yaml e basta.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: personalities
+
+resources:
+  - ../../base
+  - spazio-dei-nomi.yaml
+  - domini.yaml
+
+components:
+  - ../../istio
+
+# Il registro e il tag del rilascio. REGISTRO è un segnaposto: il servizio
+# che ospita le immagini non è ancora deciso (vedi il README).
+images:
+  - name: persona-api
+    newName: REGISTRO/personalities/api
+    newTag: "0.1.0"
+  - name: persona-worker
+    newName: REGISTRO/personalities/worker
+    newTag: "0.1.0"
+  - name: persona-worker-gpu
+    newName: REGISTRO/personalities/worker-gpu
+    newTag: "0.1.0"
+  - name: persona-web
+    newName: REGISTRO/personalities/web
+    newTag: "0.1.0"
+  - name: persona-admin
+    newName: REGISTRO/personalities/admin
+    newTag: "0.1.0"
+
+configMapGenerator:
+  - name: persona-config
+    behavior: merge
+    literals:
+      # I modelli. Con LM Studio o vLLM sul PC, attraverso Tailscale: un
+      # fornitore remoto, non una capacità del cluster — non abilita
+      # l'addestramento. Con Anthropic: PERSONA_LLM_PROVIDER=anthropic e la
+      # chiave in segreti.env.
+      - PERSONA_LLM_PROVIDER=openai-compatible
+      - PERSONA_LLM_BASE_URL=http://INDIRIZZO_TAILSCALE:1234/v1
+      - PERSONA_EMBEDDING_BASE_URL=http://INDIRIZZO_TAILSCALE:1234/v1
+  - name: keycloak-realm
+    files:
+      - realm.json=../../../keycloak/realm-personalities.prod.json
+
+secretGenerator:
+  # PERSONA_DATABASE_URL, POSTGRES_PASSWORD, KEYCLOAK_DB_PASSWORD,
+  # KC_BOOTSTRAP_ADMIN_PASSWORD, chiavi dei modelli. Vedi segreti.env.example.
+  - name: persona-segreti
+    envs: [segreti.env]
+  # I segnaposto del realm di Keycloak. Vedi keycloak.env.example.
+  - name: keycloak-realm-segreti
+    envs: [keycloak.env]
+
+patches:
+  # I file caricati fra API e worker: ReadWriteMany su uno storage che lo
+  # offre. Il nome della classe dipende dal cluster.
+  - target: {kind: PersistentVolumeClaim, name: caricamenti}
+    patch: |-
+      - op: add
+        path: /spec/storageClassName
+        value: CLASSE_RWX
+
+replacements:
+  - path: ../../istio/sostituzioni-domini.yaml

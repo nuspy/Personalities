@@ -1,26 +1,41 @@
 # Immagine unica per API e worker: cambia il comando, non il contenuto.
-# Lo stesso codice serve le richieste e le esegue, e avere due immagini
-# significherebbe poterle disallineare.
-FROM python:3.11-slim
+# Lo stesso codice serve le richieste e le esegue, e avere due basi diverse
+# significherebbe poterle disallineare. Due stadi soltanto per ciò che il
+# worker aggiunge — ffmpeg e Whisper per l'audio — e che all'API non serve.
+#
+#   docker build -f deploy/Dockerfile.backend --target api    -t persona-api .
+#   docker build -f deploy/Dockerfile.backend --target worker -t persona-worker .
+
+FROM python:3.11-slim AS api
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
 # Dipendenze prima del codice: cambiano di rado, e così il livello resta in
 # cache fra una build e l'altra.
-COPY pyproject.toml ./
-COPY deploy/requirements-backend.txt ./
-RUN pip install --no-cache-dir -r requirements-backend.txt
+COPY deploy/requirements-backend.txt deploy/requirements-documenti.txt ./
+RUN pip install -r requirements-backend.txt -r requirements-documenti.txt
 
+COPY alembic.ini ./
 COPY platform_core ./platform_core
+# I decoder dei formati vengono dalla pipeline storica e si usano così come
+# sono; la sua interfaccia grafica resta fuori (.dockerignore).
+COPY historical_persona_pipeline ./historical_persona_pipeline
+# I guardrail sono dati, letti da `data/guards` all'avvio.
+COPY data/guards ./data/guards
 
 # Utente non privilegiato: un processo che non deve scrivere sul filesystem
-# dell'immagine non deve poterlo fare.
-RUN useradd --create-home --uid 1000 persona && chown -R persona:persona /app
+# dell'immagine non deve poterlo fare. I caricamenti vanno su un volume.
+RUN useradd --create-home --uid 1000 persona \
+    && mkdir -p /var/lib/persona/caricamenti \
+    && chown -R persona:persona /app /var/lib/persona
 USER persona
+
+ENV PERSONA_UPLOAD_DIR=/var/lib/persona/caricamenti
 
 EXPOSE 8100
 
@@ -29,4 +44,30 @@ EXPOSE 8100
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/healthz', timeout=3)"
 
-CMD ["uvicorn", "platform_core.api.app:app", "--host", "0.0.0.0", "--port", "8100"]
+# Senza `--proxy-headers` dietro Istio l'API vedrebbe ogni richiesta arrivare
+# dal sidecar, e il registro di audit annoterebbe sempre lo stesso indirizzo.
+CMD ["uvicorn", "platform_core.api.app:app", "--host", "0.0.0.0", "--port", "8100", \
+     "--proxy-headers", "--forwarded-allow-ips", "*"]
+
+
+# --- worker CPU: digestione e ingestione -----------------------------------
+
+FROM api AS worker
+
+USER root
+# ffmpeg per estrarre l'audio dai video; il resto delle dipendenze di sistema
+# lo portano già le ruote di PyMuPDF e lxml.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+# Whisper per la trascrizione: pesa centinaia di megabyte fra ctranslate2 e
+# onnxruntime, ed è per questo che sta qui e non nell'API.
+RUN pip install "faster-whisper>=1.1"
+USER persona
+
+# Il modello di Whisper si scarica al primo audio: in una cartella del volume,
+# o ogni riavvio del pod lo scaricherebbe di nuovo.
+ENV HF_HOME=/var/lib/persona/modelli
+
+HEALTHCHECK NONE
+CMD ["python", "-m", "platform_core.builds", "--senza-acceleratore"]

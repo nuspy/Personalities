@@ -1,0 +1,28 @@
+# L'ingresso: quattro domini, HTTPS con il certificato nel segreto
+# `personalities-tls` dello spazio dei nomi del gateway, e l'HTTP che rimanda
+# all'HTTPS. I domini veri li mette l'overlay; qui i segnaposto.
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: personalities
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port: {number: 443, name: https, protocol: HTTPS}
+      tls:
+        mode: SIMPLE
+        credentialName: personalities-tls
+      hosts:
+        - DOMINIO_WEB
+        - DOMINIO_ADMIN
+        - DOMINIO_API
+        - DOMINIO_AUTH
+    - port: {number: 80, name: http, protocol: HTTP}
+      tls:
+        httpsRedirect: true
+      hosts:
+        - DOMINIO_WEB
+        - DOMINIO_ADMIN
+        - DOMINIO_API
+        - DOMINIO_AUTH

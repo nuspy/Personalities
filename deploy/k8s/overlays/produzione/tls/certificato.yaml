@@ -1,0 +1,32 @@
+# Let's Encrypt con la sfida HTTP-01 risolta attraverso il gateway di Istio.
+# L'email riceve gli avvisi di scadenza se il rinnovo automatico fallisce.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: EMAIL_AVVISI_CERTIFICATI
+    privateKeySecretRef:
+      name: letsencrypt-account
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: istio
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: personalities-tls
+  namespace: istio-system
+spec:
+  secretName: personalities-tls
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+  dnsNames:
+    - personalities.tadamoo.com
+    - admin.personalities.tadamoo.com
+    - api.personalities.tadamoo.com
+    - auth.personalities.tadamoo.com
