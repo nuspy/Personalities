@@ -22,7 +22,6 @@ import {
   TestoParlato,
   useVoce,
   useVolto,
-  type Istante,
 } from "./voce";
 
 interface Turno {

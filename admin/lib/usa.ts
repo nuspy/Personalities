@@ -31,32 +31,44 @@ export function useDati<T>(
   dipendenze: unknown[] = [],
 ): Caricamento<T> {
   const token = useToken();
-  const [dati, setDati] = useState<T | null>(null);
-  const [errore, setErrore] = useState<string | null>(null);
-  const [inCorso, setInCorso] = useState(true);
   const [quando, setQuando] = useState(0);
-
   const ricarica = useCallback(() => setQuando((n) => n + 1), []);
+
+  /* Che cosa decide se ricaricare.
+   *
+   * Le dipendenze esplicite quando ci sono; altrimenti l'identità della
+   * funzione. La seconda regola è quella che mancava: una pagina che passa un
+   * `useCallback` con i suoi filtri e nessuna dipendenza esplicita non
+   * ricaricava mai al cambiare di un filtro, e il clic sembrava non fare
+   * niente. Con una funzione definita al volo senza dipendenze l'identità
+   * cambierebbe a ogni rendering: chi la usa così deve passarle. */
+  const chiave: unknown[] = [token, quando, ...(dipendenze.length ? dipendenze : [fetcher])];
+
+  const [esito, setEsito] = useState<{
+    chiave: unknown[];
+    dati: T | null;
+    errore: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!token) return;
-
     let annullato = false;
-    setInCorso(true);
-    setErrore(null);
 
+    /* Lo stato si scrive solo quando la risposta arriva, mai all'inizio:
+     * «in corso» si deduce confrontando la chiave dell'ultimo esito con
+     * quella attuale. Impostarlo qui dentro in modo sincrono costringerebbe
+     * React a un secondo rendering per dire una cosa già deducibile. */
     fetcher(token)
       .then((risultato) => {
-        if (!annullato) setDati(risultato);
+        if (!annullato) setEsito({ chiave, dati: risultato, errore: null });
       })
       .catch((e: unknown) => {
         if (annullato) return;
-        setErrore(
-          e instanceof ErroreApi ? e.message : "Qualcosa non ha funzionato.",
-        );
-      })
-      .finally(() => {
-        if (!annullato) setInCorso(false);
+        const messaggio =
+          e instanceof ErroreApi ? e.message : "Qualcosa non ha funzionato.";
+        /* I dati di prima restano: un ricaricamento fallito non deve
+         * svuotare la pagina di ciò che si stava guardando. */
+        setEsito((prima) => ({ chiave, dati: prima?.dati ?? null, errore: messaggio }));
       });
 
     return () => {
@@ -67,9 +79,19 @@ export function useDati<T>(
       annullato = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, quando, ...dipendenze]);
+  }, chiave);
 
-  return { dati, errore, inCorso, ricarica };
+  const aggiornato =
+    esito !== null &&
+    esito.chiave.length === chiave.length &&
+    esito.chiave.every((v, i) => Object.is(v, chiave[i]));
+
+  return {
+    dati: esito?.dati ?? null,
+    errore: aggiornato ? esito.errore : null,
+    inCorso: !aggiornato,
+    ricarica,
+  };
 }
 
 /** Esegue un'azione che modifica, riportando l'esito. */

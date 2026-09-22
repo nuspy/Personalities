@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { AuthProvider } from "react-oidc-context";
 import { WebStorageStateStore } from "oidc-client-ts";
-import type { User } from "oidc-client-ts";
 
 /* Autenticazione: il codice di autorizzazione con PKCE.
  *
@@ -27,7 +26,7 @@ const authority = `${
   process.env.NEXT_PUBLIC_KEYCLOAK_URL ?? "http://localhost:8080"
 }/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM ?? "personalities"}`;
 
-function onSigninCallback(_user: User | void): void {
+function onSigninCallback(): void {
   /* Toglie `code` e `state` dalla barra degli indirizzi dopo il login.
    * Senza, un aggiornamento della pagina rimanderebbe a Keycloak un codice già
    * consumato, e l'errore che ne esce parla di `invalid_grant` — cioè sembra
@@ -35,10 +34,21 @@ function onSigninCallback(_user: User | void): void {
   window.history.replaceState({}, document.title, window.location.pathname);
 }
 
-export function Providers({ children }: { children: React.ReactNode }) {
-  const [montato, setMontato] = useState(false);
+/* Vero sul client, falso sul server e durante l'idratazione.
+ *
+ * `useSyncExternalStore` e non uno stato impostato in un effetto: dà lo
+ * stesso risultato — il primo rendering coincide con quello del server, il
+ * successivo sa di essere nel browser — senza il rendering a cascata che un
+ * `setState` dentro `useEffect` provoca. Non c'è niente a cui iscriversi: il
+ * valore non cambia più dopo il montaggio. */
+const nessunaIscrizione = () => () => {};
 
-  useEffect(() => setMontato(true), []);
+function useSulClient(): boolean {
+  return useSyncExternalStore(nessunaIscrizione, () => true, () => false);
+}
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  const montato = useSulClient();
 
   const config = useMemo(
     () =>
