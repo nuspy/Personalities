@@ -195,6 +195,20 @@ class Settings(BaseSettings):
     #: preferenza, e' una decisione di piattaforma.
     embedding_model: str = "text-embedding-qwen3-embedding-0.6b"
 
+    # --- ricerca online -----------------------------------------------------
+    #: Chi cerca sul web, quando una personalita' lo chiede: `disattivata`
+    #: (nessuno: la ricerca resta spenta e la cosa si legge nella traccia) o
+    #: `firecrawl`.
+    #:
+    #: Firecrawl e non un motore di ricerca puro perche' restituisce la pagina
+    #: gia' ripulita invece di uno snippet di due righe: su due righe non si
+    #: ancora niente, e il groundcheck le boccerebbe quasi sempre.
+    ricerca_provider: str = "disattivata"
+    #: L'indirizzo del servizio: quello ospitato, o un'istanza propria — dove
+    #: le domande degli utenti non escono.
+    ricerca_base_url: str = ""
+    ricerca_api_key: str = ""
+
     cors_origins: List[str] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://localhost:3001"]
     )

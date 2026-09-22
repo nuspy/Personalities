@@ -27,6 +27,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
 
 from ..domain.knowledge_models import PersonalityVersion
 from ..knowledge.retriever import EsitoRecupero, Retriever
+from ..knowledge.ricerca_web import ConfigurazioneRicerca, RicercaWeb
 from ..llm.base import CacheHint, GenerationRequest, LLMProvider, Message, StreamChunk, Usage
 from ..settings import get_settings
 from ..observability.tracing import traccia
@@ -71,6 +72,12 @@ class EsitoTurno:
     tempi_ms: Dict[str, int] = field(default_factory=dict)
     #: I nomi delle voci chiamate in causa che hanno portato passaggi.
     menzioni: List[str] = field(default_factory=list)
+    #: Cosa ha fatto la ricerca online: quanti passaggi ha portato, da quali
+    #: domini, o perché non ne ha portati. Vuoto quando non era accesa.
+    #: Sta nella traccia perché quando una risposta manca di un fatto recente
+    #: la prima domanda è se la ricerca sia avvenuta, e senza questo si
+    #: risponde per tentativi.
+    ricerca: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def degradato(self) -> bool:
@@ -98,6 +105,7 @@ class EsitoTurno:
                 "richiesto": self.modo_richiesto,
                 "motivo": self.motivo_degrado,
             },
+            **({"ricerca": self.ricerca} if self.ricerca else {}),
         }
 
 
@@ -141,9 +149,14 @@ class PersonaEngine:
         retriever: Optional[Retriever] = None,
         builder: Optional[ContextBuilder] = None,
         strategia: Optional[ContextStrategy] = None,
+        ricerca: Optional["RicercaWeb"] = None,
     ) -> None:
         self._provider = provider
         self._retriever = retriever
+        #: Chi cerca sul web quando una personalità lo chiede. Iniettabile
+        #: perché altrimenti il ramo sarebbe verificabile solo con una rete e
+        #: un servizio veri.
+        self._ricerca = ricerca
         self._builder = builder or ContextBuilder()
         #: Come il prefisso stabile viene fatto riconoscere al motore. Scelta
         #: dal fornitore se non indicata: è lui a sapere se dietro c'è una
@@ -215,6 +228,12 @@ class PersonaEngine:
         esito.menzioni = chiamate
         esito.tempi_ms["recupero"] = int((time.perf_counter() - inizio) * 1000)
 
+        # Il web per ultimo, e in coda ai passaggi del corpus: è materiale che
+        # nessuno ha scelto di mettere nella voce, e l'ordine nel prompt è già
+        # un giudizio su quanto pesi.
+        if esito.modo == "rag":
+            await self._cerca_online(esito, versione, domanda)
+
         volatile = (
             strato_volatile_da_recupero(
                 esito.recupero, memorie=memorie, riassunto=riassunto,
@@ -233,6 +252,93 @@ class PersonaEngine:
             domanda=domanda,
         )
         return esito
+
+    async def _cerca_online(
+        self, esito: EsitoTurno, versione: PersonalityVersion, domanda: str,
+    ) -> None:
+        """Aggiunge al recupero i passaggi trovati sul web, se la voce lo vuole.
+
+        **Non fa mai fallire il turno.** Un servizio di ricerca lento o caduto
+        è un contrattempo esterno: la risposta esce con il corpus che c'è, e
+        la traccia dice cosa è mancato. L'alternativa — un errore in faccia a
+        chi ha fatto una domanda — trasformerebbe una funzione accessoria nel
+        punto più fragile della piattaforma.
+        """
+        configurazione = ConfigurazioneRicerca.da_rag(versione.rag_config)
+        utilizzabile, motivo = configurazione.utilizzabile()
+
+        if not configurazione.attiva:
+            return
+        if not utilizzabile:
+            esito.ricerca = {"eseguita": False, "motivo": motivo}
+            logger.info("Ricerca online non eseguita: %s", motivo)
+            return
+
+        fornitore = self._ricerca
+        if fornitore is None:
+            from ..knowledge.ricerca_web import fornitore_ricerca
+
+            fornitore = fornitore_ricerca()
+
+        if not fornitore.disponibile():
+            esito.ricerca = {
+                "eseguita": False,
+                "motivo": (
+                    "la personalità chiede la ricerca online ma questo "
+                    "impianto non ha un fornitore configurato "
+                    "(`PERSONA_RICERCA_PROVIDER`)"
+                ),
+            }
+            logger.warning("%s", esito.ricerca["motivo"])
+            return
+
+        from ..knowledge.ricerca_web import passaggi_da_risultati
+
+        inizio = time.perf_counter()
+        try:
+            risultati = await fornitore.cerca(
+                domanda,
+                siti=configurazione.siti,
+                solo=configurazione.solo_lista,
+                limite=configurazione.max_risultati,
+            )
+        except Exception as exc:  # noqa: BLE001
+            esito.ricerca = {"eseguita": False, "motivo": f"ricerca fallita: {exc}"}
+            logger.warning("Ricerca online fallita", exc_info=True)
+            return
+
+        passaggi = passaggi_da_risultati(
+            risultati,
+            domanda=domanda,
+            siti=configurazione.siti,
+            solo=configurazione.solo_lista,
+            limite=configurazione.max_risultati,
+        )
+
+        if esito.recupero is None:
+            esito.recupero = EsitoRecupero(domanda=domanda)
+        for passaggio in passaggi:
+            passaggio.etichetta = f"K{len(esito.recupero.scelti) + 1}"
+            esito.recupero.scelti.append(passaggio)
+
+        esito.tempi_ms["ricerca_online"] = int((time.perf_counter() - inizio) * 1000)
+        esito.ricerca = {
+            "eseguita": True,
+            "fornitore": fornitore.nome,
+            "modo": configurazione.modo,
+            "siti": list(configurazione.siti),
+            "trovati": len(risultati),
+            "usati": len(passaggi),
+            # I domini che sono davvero entrati nella risposta: è la
+            # verifica che la lista abbia funzionato, e si legge senza
+            # aprire i passaggi uno per uno.
+            "domini": sorted({
+                p.corrispondenza.documento_uri.split("/")[2]
+                for p in passaggi
+                if p.corrispondenza.documento_uri
+                and len(p.corrispondenza.documento_uri.split("/")) > 2
+            }),
+        }
 
     async def rispondi_in_streaming(
         self, turno: EsitoTurno, *, versione: PersonalityVersion,

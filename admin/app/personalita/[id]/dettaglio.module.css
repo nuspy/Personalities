@@ -98,3 +98,47 @@
   flex: 1 1 16rem;
   min-width: 0;
 }
+
+/* Il riquadro della ricerca online.
+ *
+ * Un `fieldset`, non un `div`: sono opzioni che si leggono insieme, e chi
+ * naviga a voce sente il titolo del gruppo prima di ciascuna. Il bordo
+ * leggero le separa dal resto del modulo senza fare rumore.
+ */
+.gruppo {
+  border: 1px solid var(--filo-tenue);
+  border-radius: var(--raggio);
+  padding: 0.75rem 1rem 1rem;
+  margin: 0;
+  min-width: 0;   /* o un fieldset non si lascia stringere sotto il contenuto */
+}
+
+.gruppoTitolo {
+  font-family: var(--interfaccia);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--inchiostro-tenue);
+  padding: 0 0.4rem;
+}
+
+/* Per una lista di domini: poche righe, non un prompt intero. */
+.areaCorta {
+  width: 100%;
+  min-height: 5.5rem;
+  padding: 0.5rem 0.6rem;
+  font-family: var(--apparato);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--inchiostro);
+  background: var(--superficie-alta);
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  resize: vertical;
+}
+
+.areaCorta:focus-visible {
+  outline: 2px solid var(--rubrica);
+  outline-offset: 2px;
+}

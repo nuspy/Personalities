@@ -14,6 +14,8 @@ possono eseguire in qualunque ordine e nessuna vede i dati di un'altra.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import logging
 import os
 from typing import AsyncIterator
 
@@ -197,3 +199,38 @@ async def altro_utente(session, principal_altro) -> User:
     from platform_core.domain.repositories import UserRepository
 
     return await UserRepository(session).ensure(principal_altro)
+
+@contextlib.contextmanager
+def avvisi_di(modulo, livello: int = logging.WARNING):
+    """Raccoglie i messaggi che un modulo registra, senza passare da caplog.
+
+    `caplog` attacca il suo gestore alla radice e dipende dalla propagazione e
+    dai livelli globali: basta che un altro test — o un'istrumentazione —
+    tocchi quella configurazione, e la cattura smette di funzionare *in certi
+    ordini di esecuzione soltanto*. Un difetto così costa più tempo di quanto
+    ne valga il test.
+
+    Questo si attacca al logger del modulo e non dipende da nient'altro.
+    """
+    raccolti: list[str] = []
+
+    class Raccoglitore(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            raccolti.append(record.getMessage())
+
+    gestore = Raccoglitore(level=livello)
+    logger = modulo.logger
+    livello_prima = logger.level
+    spento_prima = logger.disabled
+    logger.addHandler(gestore)
+    logger.setLevel(livello)
+    # Un `fileConfig` altrui — quello di Alembic, per dirne uno — può aver
+    # spento questo logger: un gestore attaccato a un logger disattivato non
+    # riceve niente, e il test fallirebbe per un motivo che non è il suo.
+    logger.disabled = False
+    try:
+        yield raccolti
+    finally:
+        logger.removeHandler(gestore)
+        logger.setLevel(livello_prima)
+        logger.disabled = spento_prima

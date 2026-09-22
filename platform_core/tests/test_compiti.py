@@ -55,18 +55,22 @@ class TestRicaduta:
         assert registro.nome_per(Compito.DIGESTIONE) == "bonsai"
         assert registro.nome_per(Compito.CONVERSAZIONE) == PREDEFINITO
 
-    def test_un_modello_sparito_dall_ambiente_ricade(self, caplog):
+    def test_un_modello_sparito_dall_ambiente_ricade(self):
         """Succede davvero: si toglie un modello da PERSONA_MODELLI e la riga
         in tabella resta. Il compito gira su un altro modello, e dai risultati
         non si vede — quindi va detto nei log."""
+        from platform_core.llm import compiti as modulo
+
+        from .conftest import avvisi_di
+
         registro = RegistroModelli(
             elenco(), assegnazioni={Compito.GIUDIZIO: "sparito"},
         )
 
-        with caplog.at_level("WARNING"):
+        with avvisi_di(modulo) as avvisi:
             assert registro.nome_per(Compito.GIUDIZIO) == PREDEFINITO
 
-        assert "sparito" in caplog.text
+        assert any("sparito" in a for a in avvisi)
 
     def test_togliere_l_assegnazione_riporta_al_predefinito(self):
         registro = RegistroModelli(elenco())

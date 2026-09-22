@@ -23,6 +23,11 @@ import { useAzione, useDati } from "@/lib/usa";
 import stili from "../../comuni.module.css";
 import propri from "./dettaglio.module.css";
 
+/* La lista dei siti si scrive una per riga, ma chi incolla da un foglio
+ * separa con le virgole: si accettano entrambe invece di correggere l'utente. */
+const NUOVA_RIGA = "\n";
+const SEPARATORI = /[\n,]/;
+
 export default function Dettaglio({
   params,
 }: {
@@ -189,6 +194,33 @@ function ModuloVersione({
   const [passaggi, setPassaggi] = useState(
     String((iniziale?.rag_config?.max_chunks as number) ?? 6),
   );
+
+  /* La ricerca online sta qui e non fra le impostazioni della piattaforma
+     perché è una proprietà della voce: Seneca non ha bisogno di sapere cosa
+     è successo stamattina, una voce che commenta l'attualità sì. */
+  const ricercaIniziale = (iniziale?.rag_config?.ricerca_online ?? {}) as {
+    attiva?: boolean;
+    siti?: string[];
+    modo?: string;
+    max_risultati?: number;
+  };
+  const [cerca, setCerca] = useState(Boolean(ricercaIniziale.attiva));
+  const [siti, setSiti] = useState((ricercaIniziale.siti ?? []).join(NUOVA_RIGA));
+  const [modoSiti, setModoSiti] = useState(
+    ricercaIniziale.modo === "solo" ? "solo" : "anche",
+  );
+  const [risultati, setRisultati] = useState(
+    String(ricercaIniziale.max_risultati ?? 3),
+  );
+
+  const listaSiti = siti
+    .split(SEPARATORI)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  /* «Solo questi siti» con la lista vuota significa *nessun* sito, non
+     *tutti*: dirlo qui evita una voce che tace e nessuno sa perché. */
+  const listaMancante = cerca && modoSiti === "solo" && listaSiti.length === 0;
+
   const [pubblica, setPubblica] = useState(false);
 
   return (
@@ -246,6 +278,91 @@ function ModuloVersione({
         </div>
       </div>
 
+      <fieldset className={propri.gruppo}>
+        <legend className={propri.gruppoTitolo}>Ricerca online</legend>
+        <p className={stili.campoAiuto}>
+          Un corpus è chiuso per costruzione, ed è la sua virtù: si sa cosa c&apos;è
+          dentro. Per una voce che commenta l&apos;attualità, o che risponde su un
+          prodotto che si aggiorna, quella chiusura è il difetto. Ciò che arriva
+          dal web entra in coda ai passaggi del corpus, con la sua fonte e la
+          sua data, e la verifica di fondatezza lo tratta come gli altri.
+        </p>
+
+        <label className={propri.casella}>
+          <input
+            type="checkbox"
+            checked={cerca}
+            onChange={(e) => setCerca(e.target.checked)}
+          />
+          Cerca anche online
+        </label>
+
+        {cerca && (
+          <>
+            <div className={stili.campo}>
+              <label className={stili.campoEtichetta} htmlFor="siti">
+                Siti
+              </label>
+              <span className={stili.campoAiuto}>
+                Uno per riga. Valgono anche i sottodomini: <code>example.com</code>{" "}
+                comprende <code>docs.example.com</code>. Si può incollare
+                l&apos;indirizzo completo.
+              </span>
+              <textarea
+                id="siti"
+                className={propri.areaCorta}
+                value={siti}
+                placeholder={`example.com${NUOVA_RIGA}docs.example.com`}
+                onChange={(e) => setSiti(e.target.value)}
+              />
+            </div>
+
+            <div className={stili.riga}>
+              <div className={stili.campo}>
+                <label className={stili.campoEtichetta} htmlFor="modo-siti">
+                  Uso della lista
+                </label>
+                <select
+                  id="modo-siti"
+                  className={stili.selezione}
+                  value={modoSiti}
+                  onChange={(e) => setModoSiti(e.target.value)}
+                >
+                  <option value="anche">
+                    Includili — ricerca aperta, questi privilegiati
+                  </option>
+                  <option value="solo">
+                    Limitati a questi — nient&apos;altro entra
+                  </option>
+                </select>
+              </div>
+
+              <div className={stili.campo}>
+                <label className={stili.campoEtichetta} htmlFor="risultati">
+                  Pagine per risposta
+                </label>
+                <input
+                  id="risultati"
+                  className={stili.ingresso}
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={risultati}
+                  onChange={(e) => setRisultati(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {listaMancante && (
+              <p className={stili.errore}>
+                «Limitati a questi» con la lista vuota significa nessuna fonte:
+                la ricerca non verrebbe eseguita.
+              </p>
+            )}
+          </>
+        )}
+      </fieldset>
+
       <label className={propri.casella}>
         <input
           type="checkbox"
@@ -259,12 +376,20 @@ function ModuloVersione({
 
       <button
         className={stili.primaria}
-        disabled={inCorso || prompt.trim().length < 10}
+        disabled={inCorso || prompt.trim().length < 10 || listaMancante}
         onClick={async () => {
           const fatta = await esegui((t) =>
             creaVersione(t, personalitaId, {
               system_prompt: prompt.trim(),
-              rag_config: { max_chunks: Number(passaggi) || 6 },
+              rag_config: {
+                max_chunks: Number(passaggi) || 6,
+                ricerca_online: {
+                  attiva: cerca,
+                  siti: listaSiti,
+                  modo: modoSiti,
+                  max_risultati: Number(risultati) || 3,
+                },
+              },
               guard_config: { groundcheck: verifica },
               pubblica,
             }),

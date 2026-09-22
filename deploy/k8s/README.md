@@ -139,6 +139,33 @@ non rifiuta nulla — può essere assegnato a qualunque compito, comprese le
 risposte agli utenti: decide l'amministratore. La console lo dichiara accanto
 al nome, e il registro di audit conserva chi ha scelto cosa.
 
+## Ricerca online
+
+Un corpus è chiuso per costruzione, ed è la sua virtù: si sa cosa c'è dentro.
+Per una voce che commenta l'attualità, o che risponde su un prodotto che si
+aggiorna, quella chiusura è il difetto.
+
+**Si accende per personalità**, non per la piattaforma: sta in `rag_config`
+insieme al resto del recupero, e si compila dalla console nella scheda della
+voce. Due modi: *limitati a questi siti* — la voce aziendale che deve citare
+la propria documentazione e nient'altro — oppure *includili*, ricerca aperta
+con quei siti privilegiati.
+
+**La lista dei domini la applichiamo noi.** Si chiede al motore di limitarsi,
+e lo fa di solito; «di solito» non è una garanzia, e un risultato fuori lista
+dentro il contesto di una voce professionale è esattamente il caso che la
+lista doveva impedire. Il filtro vero è sui risultati, sottodomini compresi.
+
+Il fornitore è Firecrawl (`PERSONA_RICERCA_PROVIDER=firecrawl` più indirizzo e
+chiave fra i segreti) perché restituisce la pagina già ripulita invece di uno
+snippet di due righe: su due righe non si ancora niente, e la verifica di
+fondatezza le boccerebbe quasi sempre. Spento, una voce che chiede la ricerca
+risponde lo stesso con il corpus che ha, e la traccia dice cosa è mancato.
+
+Ciò che arriva dal web non entra mai nello strato stabile del prompt — cambia
+a ogni richiesta, e lo strato stabile deve restare identico byte per byte o lo
+sconto del prompt caching sparisce in silenzio.
+
 ## Accensione del motore locale
 
 Un modello su GPU occupa la scheda anche mentre nessuno lo interroga. Il

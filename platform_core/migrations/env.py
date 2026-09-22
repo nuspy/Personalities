@@ -35,7 +35,14 @@ from platform_core.settings import get_settings  # noqa: E402
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # `disable_existing_loggers=False` non è un dettaglio: il valore
+    # predefinito è `True`, e **spegne ogni logger già creato** che il file
+    # non nomini. Quando Alembic gira nello stesso processo
+    # dell'applicazione — gli strumenti da riga di comando, i test — da quel
+    # momento in poi il resto della piattaforma smette di scrivere nei log,
+    # senza che nulla lo segnali. È il genere di guasto che si scopre
+    # cercando per un'ora un messaggio che il codice emette davvero.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

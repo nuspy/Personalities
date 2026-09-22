@@ -49,6 +49,11 @@ configMapGenerator:
       - PERSONA_LLM_PROVIDER=openai-compatible
       - PERSONA_LLM_BASE_URL=http://INDIRIZZO_TAILSCALE:1234/v1
       - PERSONA_EMBEDDING_BASE_URL=http://INDIRIZZO_TAILSCALE:1234/v1
+      # La ricerca online, quando una personalità la chiede: `disattivata`
+      # o `firecrawl`. Spenta, le voci che la chiedono rispondono con il
+      # corpus che hanno e la traccia dice cosa è mancato. L'indirizzo e la
+      # chiave stanno fra i segreti.
+      - PERSONA_RICERCA_PROVIDER=disattivata
   - name: keycloak-realm
     files:
       - realm.json=../../../keycloak/realm-personalities.prod.json
