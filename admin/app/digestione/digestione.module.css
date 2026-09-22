@@ -127,6 +127,11 @@
 }
 
 .barraRiempimento {
+  /* Blocco esplicito: è uno `span` dentro la traccia, e fuori dalla griglia
+   * resta inline — un elemento inline ignora larghezza e altezza, e la barra
+   * restava vuota qualunque fosse il valore. La traccia no: è figlia diretta
+   * della griglia, e le celle di una griglia diventano blocchi da sole. */
+  display: block;
   height: 100%;
   background: var(--inchiostro-tenue);
 }
