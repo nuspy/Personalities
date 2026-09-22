@@ -25,7 +25,7 @@ def read_capabilities(
 ) -> dict:
     """Cosa la piattaforma sa fare ora, e perche' non fa il resto."""
     capabilities = registry.platform_capabilities(
-        local_engines=_local_engines(settings)
+        local_engines=_local_engines(settings), voice=_voce(settings),
     )
     return {
         "environment": settings.environment,
@@ -47,7 +47,9 @@ def require_feature(feature: Feature):
         settings: Settings = Depends(get_settings),
     ) -> None:
         available, reason = registry.can(
-            feature, local_engines=_local_engines(settings)
+            feature,
+            local_engines=_local_engines(settings),
+            voice=_voce(settings),
         )
         if not available:
             raise HTTPException(
@@ -72,3 +74,19 @@ def _local_engines(settings: Settings) -> Optional[list]:
     valgono quelli dichiarati nell'ambiente.
     """
     return list(settings.local_engine_urls)
+
+
+def _voce(settings: Settings) -> dict:
+    """Cosa la piattaforma sa fare con la voce, adesso.
+
+    Rilevato e non dedotto dalle impostazioni soltanto: `tts_align_words`
+    acceso con faster-whisper assente darebbe un labiale annunciato e mai
+    consegnato, cioe' un avatar che secondo l'interfaccia dovrebbe muovere la
+    bocca e non la muove — il difetto che sembra un guasto del modello 3D.
+    """
+    from ..deps import get_allineatore
+
+    return {
+        Feature.VOICE_OUTPUT: bool(settings.tts_enabled),
+        Feature.LIP_SYNC: bool(settings.tts_enabled) and get_allineatore() is not None,
+    }

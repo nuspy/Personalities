@@ -302,6 +302,16 @@ class Personality(Base, TimestampMixin, OwnedMixin):
         ForeignKey("commercial_categories.id", ondelete="SET NULL"),
     )
 
+    #: Il volto. Nullo e' lo stato normale: una voce senza ritratto si
+    #: mostra col suo nome, e pretendere un'immagine per pubblicare
+    #: significherebbe che ogni personalita' aspetta un grafico.
+    #:
+    #: `SET NULL` e non `CASCADE`: cancellare un avatar deve togliere il volto
+    #: alle voci che lo portavano, non le voci.
+    avatar_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("avatars.id", ondelete="SET NULL"),
+    )
+
     current_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid,
         # Nessun vincolo di chiave esterna: le due tabelle si puntano a
@@ -416,6 +426,14 @@ class PersonalityVersion(Base, TimestampMixin):
     rag_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB)
     memory_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB)
     guard_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB)
+
+    #: Come suona questa voce: `{"voce": "...", "lingua": "it"}`.
+    #:
+    #: Versionata come il modello e non messa sull'avatar: il timbro fa parte
+    #: di come la personalita' si esprime, e cambiarlo e' un atto deliberato
+    #: quanto cambiare il prompt. Il volto invece non e' versionato — un
+    #: ritratto sostituito non cambia il senso delle conversazioni passate.
+    voice_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB)
 
     #: Il profilo stilistico da cui il prompt è stato generato. Conservarlo
     #: permette di rigenerare il prompt con regole diverse senza rifare

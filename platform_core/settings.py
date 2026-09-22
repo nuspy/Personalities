@@ -54,6 +54,24 @@ class Settings(BaseSettings):
     #: per errore e' fra i modi piu' comuni di esporre un servizio.
     auth_disabled: bool = False
 
+    # --- voce --------------------------------------------------------------
+    #: Il fornitore di sintesi. Vuoto o irraggiungibile significa che la
+    #: piattaforma non parla: la funzione si dichiara indisponibile, non si
+    #: nasconde — un pulsante che sparisce sembra un difetto, uno disabilitato
+    #: col motivo accanto e' informazione.
+    tts_base_url: str = "http://127.0.0.1:1234/v1"
+    tts_api_key: str = "non-serve-in-locale"
+    tts_model: str = ""
+    tts_voice: str = ""
+    #: Con `false` la sintesi usa il fornitore muto: serve a provare il
+    #: percorso completo — diritto, generazione, allineamento, visemi — su una
+    #: macchina senza modello di voce.
+    tts_enabled: bool = False
+    #: Misurare i tempi delle parole costa una trascrizione dell'audio appena
+    #: prodotto. Vale su una GPU; su un nodo CPU raddoppia l'attesa della
+    #: risposta parlata, e li' conviene spegnerlo e rinunciare al labiale.
+    tts_align_words: bool = True
+
     # --- osservabilita' ----------------------------------------------------
     otlp_endpoint: str = "http://localhost:4318"
     tracing_enabled: bool = True

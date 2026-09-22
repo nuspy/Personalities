@@ -263,3 +263,70 @@ export async function leggiConto(token: string): Promise<Conto> {
     await fetch(`${API}/me/billing`, { headers: intestazioni(token) }),
   );
 }
+
+/* ---- voce e volto ---- */
+
+export interface Viseme {
+  forma: string;
+  inizio: number;
+  fine: number;
+}
+
+export interface ParolaDetta {
+  testo: string;
+  inizio: number;
+  fine: number;
+}
+
+export interface Voce {
+  audio: string;
+  media_type: string;
+  durata: number;
+  /** `allineamento`, `fornitore`, `stima`, o vuoto quando i tempi non ci sono.
+   *  Vuoto significa che non si deve animare niente: una bocca mossa su tempi
+   *  inventati si vede fuori sincrono, ed è peggio di una ferma. */
+  origine_tempi: string;
+  parole: ParolaDetta[];
+  visemi: Viseme[];
+}
+
+export interface Volto {
+  id: string;
+  slug: string;
+  nome: string;
+  tipo: "immagine" | "video" | "modello";
+  uri: string;
+  labiale: boolean;
+  pose: Record<string, string>;
+  extra: Record<string, unknown>;
+}
+
+export async function leggiVoce(
+  token: string,
+  testo: string,
+  personalita: string | null,
+  labiale: boolean,
+): Promise<Voce> {
+  return leggi(
+    await fetch(`${API}/voice/speak`, {
+      method: "POST",
+      headers: intestazioni(token),
+      body: JSON.stringify({ testo, personality: personalita, labiale }),
+    }),
+  );
+}
+
+export async function leggiVolto(slug: string): Promise<Volto | null> {
+  const corpo = await leggi<{ avatar: Volto | null }>(
+    await fetch(`${API}/personalities/${slug}/avatar`),
+  );
+  return corpo.avatar;
+}
+
+/** Da base64 a qualcosa che un `<audio>` sa riprodurre. */
+export function sorgenteAudio(voce: Voce): string {
+  const binario = atob(voce.audio);
+  const byte = new Uint8Array(binario.length);
+  for (let i = 0; i < binario.length; i++) byte[i] = binario.charCodeAt(i);
+  return URL.createObjectURL(new Blob([byte], { type: voce.media_type }));
+}

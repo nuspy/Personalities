@@ -535,3 +535,18 @@
     display: none;
   }
 }
+
+/* ---- azioni sul turno ---- */
+
+.azioniTurno {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.erroreVoce {
+  font-size: 0.8125rem;
+  color: var(--allarme);
+}

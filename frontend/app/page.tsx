@@ -16,6 +16,14 @@ import {
   type Verifica,
 } from "@/lib/api";
 import stili from "./page.module.css";
+import {
+  BottoneAscolto,
+  Ritratto,
+  TestoParlato,
+  useVoce,
+  useVolto,
+  type Istante,
+} from "./voce";
 
 interface Turno {
   chi: "utente" | "voce";
@@ -189,6 +197,23 @@ function Conversazione() {
   const [personalita, setPersonalita] = useState<Personalita[]>([]);
   const [scelta, setScelta] = useState<string | null>(null);
   const [conto, setConto] = useState<Conto | null>(null);
+  const voce = useVoce(scelta);
+  const volto = useVolto(scelta);
+  const [capacita, setCapacita] = useState<CapacitaPiattaforma | null>(null);
+
+  useEffect(() => {
+    leggiCapacita().then(setCapacita).catch(() => setCapacita(null));
+  }, []);
+
+  /* Il pulsante di ascolto si disabilita col motivo accanto invece di
+   * sparire: uno che scompare sembra un difetto dell'interfaccia, uno spento
+   * con scritto perché dice a chi amministra cosa configurare. */
+  const capacitaVoce = {
+    disponibile: capacita?.features?.voice_output?.available ?? false,
+    motivo:
+      capacita?.features?.voice_output?.reason ??
+      "La voce non è configurata su questa installazione.",
+  };
 
   const fondo = useRef<HTMLDivElement>(null);
   const campo = useRef<HTMLTextAreaElement>(null);
@@ -344,6 +369,8 @@ function Conversazione() {
           </select>
         )}
 
+        {volto && <Ritratto volto={volto} istante={voce.istante} />}
+
         {conto && <Saldo conto={conto} />}
 
         <button
@@ -381,6 +408,10 @@ function Conversazione() {
                   inCorso && i === turni.length - 1 && turno.chi === "voce"
                 }
                 pensa={pensa && i === turni.length - 1}
+                voce={voce}
+                indice={i}
+                labiale={volto?.labiale ?? false}
+                vocePronta={capacitaVoce}
               />
             ))
           )}
@@ -484,12 +515,21 @@ function Riga({
   turno,
   inScrittura,
   pensa,
+  voce,
+  indice,
+  labiale,
+  vocePronta,
 }: {
   turno: Turno;
   inScrittura: boolean;
   pensa: boolean;
+  voce: ReturnType<typeof useVoce>;
+  indice: number;
+  labiale: boolean;
+  vocePronta: { disponibile: boolean; motivo: string };
 }) {
   const èVoce = turno.chi === "voce";
+  const inAscolto = voce.turno === indice;
 
   return (
     <article
@@ -514,11 +554,37 @@ function Riga({
 
       <div>
         <div className={stili.testo}>
-          {turno.testo}
+          {inAscolto ? (
+            <TestoParlato
+              testo={turno.testo}
+              voce={voce.voce}
+              parola={voce.istante.parola}
+            />
+          ) : (
+            turno.testo
+          )}
           {inScrittura && !turno.errore && (
             <span className={stili.cursore} aria-hidden="true" />
           )}
         </div>
+
+        {/* L'ascolto compare solo a risposta finita: leggere ad alta voce
+            mezza frase mentre l'altra metà arriva produrrebbe due letture
+            della stessa risposta. */}
+        {èVoce && turno.testo.trim() && !inScrittura && (
+          <div className={stili.azioniTurno}>
+            <BottoneAscolto
+              attivo={inAscolto}
+              inAttesa={inAscolto && voce.inAttesa}
+              disabilitato={!vocePronta.disponibile}
+              motivo={vocePronta.motivo}
+              onClick={() => voce.ascolta(indice, turno.testo, labiale)}
+            />
+            {inAscolto && voce.errore && (
+              <span className={stili.erroreVoce}>{voce.errore}</span>
+            )}
+          </div>
+        )}
         {pensa && !turno.testo && (
           <p className={stili.pensa}>sta ragionando…</p>
         )}

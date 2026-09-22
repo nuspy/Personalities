@@ -32,6 +32,8 @@ from .knowledge_models import (
     PersonalityVersion,
 )
 from .models import AuditLog, User
+from ..avatar.engine import valida as valida_avatar
+from .avatar_models import Avatar
 from .repositories import AuditRepository
 
 logger = logging.getLogger(__name__)
@@ -487,3 +489,98 @@ class RegistroAuditRepository:
         if target_type:
             query = query.where(AuditLog.target_type == target_type)
         return (await self._session.execute(query)).scalars().all()
+
+
+class AvatarRepository(_ConAudit):
+    """Gli avatar, con la validazione al salvataggio.
+
+    **Validati qui e non al disegno.** Un avatar rotto scoperto mentre
+    qualcuno conversa e' un volto che non compare e un errore nella console
+    del browser: nessuna informazione per chi l'ha configurato, e nessun modo
+    di collegarla alla modifica che l'ha causata. Al salvataggio il messaggio
+    arriva a chi ha appena sbagliato, mentre ha ancora in mano il perche'.
+    """
+
+    async def elenco(self) -> Sequence["Avatar"]:
+        return (await self._session.execute(
+            select(Avatar).order_by(Avatar.name)
+        )).scalars().all()
+
+    async def per_id(self, avatar_id: uuid.UUID) -> Optional["Avatar"]:
+        return await self._session.get(Avatar, avatar_id)
+
+    async def per_slug(self, slug: str) -> Optional["Avatar"]:
+        return (await self._session.execute(
+            select(Avatar).where(Avatar.slug == slug)
+        )).scalar_one_or_none()
+
+    async def crea(
+        self,
+        *,
+        slug: str,
+        name: str,
+        kind: str,
+        config: Optional[Dict[str, Any]] = None,
+        description: Optional[str] = None,
+    ) -> "Avatar":
+        valida_avatar(kind, config)
+
+        avatar = Avatar(
+            slug=slug, name=name, kind=kind,
+            config=config, description=description,
+            owner_id=self._contesto.attore.id,
+        )
+        self._session.add(avatar)
+        await self._session.flush()
+
+        await self._registra(
+            "avatar.create", tipo="avatar", target_id=avatar.id,
+            dopo={"slug": slug, "kind": kind},
+        )
+        return avatar
+
+    async def modifica(
+        self, avatar: "Avatar", **campi: Any,
+    ) -> "Avatar":
+        prima = {"slug": avatar.slug, "kind": avatar.kind, "config": avatar.config}
+
+        # Validato con i valori **dopo** la modifica, non con quelli passati:
+        # cambiare solo il tipo lasciando la vecchia configurazione produce un
+        # avatar che nessuno dei due motori sa leggere, e il controllo sui
+        # soli campi ricevuti non se ne accorgerebbe.
+        tipo = campi.get("kind", avatar.kind)
+        config = campi.get("config", avatar.config)
+        valida_avatar(tipo, config)
+
+        for campo, valore in campi.items():
+            if valore is not None:
+                setattr(avatar, campo, valore)
+        await self._session.flush()
+
+        await self._registra(
+            "avatar.update", tipo="avatar", target_id=avatar.id,
+            prima=prima,
+            dopo={"slug": avatar.slug, "kind": avatar.kind, "config": avatar.config},
+        )
+        return avatar
+
+    async def elimina(self, avatar: "Avatar") -> int:
+        """Cancella un avatar e toglie il volto a chi lo portava.
+
+        Restituisce quante personalita' sono rimaste senza. Il vincolo e'
+        `SET NULL`: cancellare un volto non deve cancellare le voci, e il
+        numero serve a chi amministra per sapere cosa ha appena cambiato
+        altrove senza doverlo scoprire guardando.
+        """
+        quante = len((await self._session.execute(
+            select(Personality.id).where(Personality.avatar_id == avatar.id)
+        )).scalars().all())
+
+        await self._registra(
+            "avatar.delete", tipo="avatar", target_id=avatar.id,
+            prima={"slug": avatar.slug, "kind": avatar.kind},
+            dopo={"personalita_senza_volto": quante},
+        )
+        await self._session.delete(avatar)
+        await self._session.flush()
+        return quante

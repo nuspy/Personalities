@@ -22,7 +22,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from ...auth.dependencies import CurrentUser, DbSession, require_role
+from ...avatar.engine import ConfigurazioneAvatarNonValida
+from ...avatar.engine import descrivi as descrivi_avatar
 from ...domain.admin_repositories import (
+    AvatarRepository,
     AdminKnowledgeRepository, AdminPersonalityRepository,
     ContestoAmministrativo, RegistroAuditRepository, TassonomiaRepository,
 )
@@ -94,6 +97,27 @@ class CreaTipo(BaseModel):
     slug: str = Field(min_length=2, max_length=60, pattern=r"^[a-z0-9][a-z0-9-]*$")
     name: str = Field(min_length=1, max_length=120)
     description: Optional[str] = None
+
+
+class CreaAvatar(BaseModel):
+    slug: str = Field(min_length=2, max_length=80, pattern=r"^[a-z0-9][a-z0-9-]*$")
+    name: str = Field(min_length=1, max_length=160)
+    kind: str = Field(pattern=r"^(immagine|video|modello)$")
+    config: Dict[str, Any] = Field(default_factory=dict)
+    description: Optional[str] = None
+
+
+class ModificaAvatar(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=160)
+    kind: Optional[str] = Field(default=None, pattern=r"^(immagine|video|modello)$")
+    config: Optional[Dict[str, Any]] = None
+    description: Optional[str] = None
+
+
+class VolgiAvatar(BaseModel):
+    """Quale volto indossa una personalità. `null` lo toglie."""
+
+    avatar_id: Optional[uuid.UUID] = None
 
 
 class CreaCategoria(BaseModel):
@@ -492,6 +516,112 @@ async def crea_categoria(
     )
     await session.commit()
     return {"id": categoria.id, "slug": categoria.slug, "rank": categoria.rank}
+
+
+# --- avatar ----------------------------------------------------------------
+
+
+def _avatar_json(a, descrittore=None) -> Dict[str, Any]:
+    corpo = {
+        "id": str(a.id),
+        "slug": a.slug,
+        "name": a.name,
+        "kind": a.kind,
+        "description": a.description,
+        "config": a.config or {},
+    }
+    if descrittore is not None:
+        corpo["descrittore"] = descrittore.to_dict()
+    return corpo
+
+
+@router.get("/avatars")
+async def elenco_avatar(session: DbSession, ctx: Contesto) -> List[Dict[str, Any]]:
+    return [
+        _avatar_json(a) for a in await AvatarRepository(session, ctx).elenco()
+    ]
+
+
+@router.post("/avatars", status_code=status.HTTP_201_CREATED)
+async def crea_avatar(
+    payload: CreaAvatar, session: DbSession, ctx: Contesto,
+) -> Dict[str, Any]:
+    repo = AvatarRepository(session, ctx)
+    if await repo.per_slug(payload.slug) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Esiste già un avatar con lo slug '{payload.slug}'",
+        )
+
+    try:
+        avatar = await repo.crea(**payload.model_dump())
+    except ConfigurazioneAvatarNonValida as exc:
+        # 400 e non 422: la forma del corpo è corretta, è il contenuto a non
+        # descrivere qualcosa di disegnabile. Il messaggio dice cosa manca,
+        # ed è l'unica cosa utile a chi lo sta configurando.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await session.commit()
+    return _avatar_json(avatar, descrivi_avatar(avatar.kind, avatar.config))
+
+
+@router.patch("/avatars/{avatar_id}")
+async def modifica_avatar(
+    avatar_id: uuid.UUID,
+    payload: ModificaAvatar,
+    session: DbSession,
+    ctx: Contesto,
+) -> Dict[str, Any]:
+    repo = AvatarRepository(session, ctx)
+    avatar = await _o_404(await repo.per_id(avatar_id), "Avatar non trovato")
+
+    try:
+        await repo.modifica(avatar, **payload.model_dump(exclude_unset=True))
+    except ConfigurazioneAvatarNonValida as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await session.commit()
+    return _avatar_json(avatar, descrivi_avatar(avatar.kind, avatar.config))
+
+
+@router.delete("/avatars/{avatar_id}")
+async def elimina_avatar(
+    avatar_id: uuid.UUID, session: DbSession, ctx: Contesto,
+) -> Dict[str, Any]:
+    repo = AvatarRepository(session, ctx)
+    avatar = await _o_404(await repo.per_id(avatar_id), "Avatar non trovato")
+
+    quante = await repo.elimina(avatar)
+    await session.commit()
+    # Quante voci sono rimaste senza volto: cancellare un avatar cambia
+    # qualcosa altrove, e scoprirlo guardando le personalità una per una
+    # sarebbe il modo peggiore.
+    return {"eliminato": True, "personalita_senza_volto": quante}
+
+
+@router.put("/personalities/{personality_id}/avatar")
+async def volgi_avatar(
+    personality_id: uuid.UUID,
+    payload: VolgiAvatar,
+    session: DbSession,
+    ctx: Contesto,
+) -> Dict[str, Any]:
+    """Assegna o toglie il volto a una personalità."""
+    personalita = await _o_404(
+        await AdminPersonalityRepository(session, ctx).per_id(personality_id)
+    )
+
+    if payload.avatar_id is not None:
+        avatar = await AvatarRepository(session, ctx).per_id(payload.avatar_id)
+        if avatar is None:
+            raise HTTPException(status_code=404, detail="Avatar non trovato")
+
+    personalita.avatar_id = payload.avatar_id
+    await session.commit()
+    return {
+        "personality_id": str(personality_id),
+        "avatar_id": str(payload.avatar_id) if payload.avatar_id else None,
+    }
 
 
 # --- realizzazione ---------------------------------------------------------

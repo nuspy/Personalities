@@ -108,3 +108,71 @@ def reset_dependencies() -> None:
     get_llm_provider.cache_clear()
     get_embedder.cache_clear()
     get_guardrail.cache_clear()
+
+
+@lru_cache(maxsize=1)
+def get_tts():
+    """Il fornitore di voce, condiviso fra le richieste.
+
+    Con `tts_enabled` spento si usa quello muto. Non e' un ripiego di
+    comodita': l'intero percorso — diritto, sintesi, allineamento, visemi,
+    consegna — dev'essere provabile su una macchina senza modello di voce, e
+    un endpoint che risponde 503 a ogni chiamata non prova niente.
+    """
+    from ..settings import get_settings
+    from ..voice.tts import SintesiMuta, SintesiOpenAICompatibile
+
+    if not get_settings().tts_enabled:
+        logger.info(
+            "Sintesi disattivata (`PERSONA_TTS_ENABLED`): si usa la voce muta."
+        )
+        return SintesiMuta()
+    return SintesiOpenAICompatibile()
+
+
+@lru_cache(maxsize=1)
+def get_allineatore():
+    """Chi misura i tempi delle parole, o `None` se non si puo'.
+
+    `None` e non un oggetto che fallisce: chi chiama deve poter consegnare
+    l'audio senza labiale invece di gestire un'eccezione per una funzione che
+    e' facoltativa per natura. Il modello pesa centinaia di megabyte e si
+    carica una volta sola, quindi la cache qui non e' un'ottimizzazione — e'
+    cio' che rende praticabile rispondere a voce piu' di una volta.
+    """
+    from ..settings import get_settings
+    from ..voice.allineamento import Allineatore
+
+    if not get_settings().tts_align_words:
+        return None
+
+    allineatore = Allineatore()
+    if not allineatore.disponibile():
+        logger.warning(
+            "faster-whisper non e' installato: la voce andra' senza labiale. "
+            "I tempi delle parole non si possono stimare senza misurarli, e "
+            "una bocca animata su una stima si vede fuori sincrono."
+        )
+        return None
+    return allineatore
+
+
+@lru_cache(maxsize=1)
+def get_stt():
+    """Chi trascrive la dettatura, o `None` se non si puo'.
+
+    `None` e non un oggetto che fallisce: il riconoscimento del browser resta
+    la via principale, e questo e' il ripiego per chi non ce l'ha. Un endpoint
+    che risponde 503 dice a chi chiama di usare l'altra strada, cosa che
+    un'eccezione generica non direbbe.
+    """
+    from ..voice.stt import AscoltoWhisper
+
+    ascoltatore = AscoltoWhisper()
+    if not ascoltatore.disponibile():
+        logger.info(
+            "faster-whisper non e' installato: la dettatura lato server non "
+            "e' offerta. Il riconoscimento del browser continua a funzionare."
+        )
+        return None
+    return ascoltatore

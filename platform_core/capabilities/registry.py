@@ -41,6 +41,14 @@ class Feature(str, Enum):
     GGUF_EXPORT = "gguf_export"
     KV_CACHE_CAG = "kv_cache_cag"
     LOCAL_INFERENCE = "local_inference"
+    #: Le due della voce non vengono dai worker ma dalla configurazione
+    #: del servizio: la sintesi e' un fornitore, il labiale e' una
+    #: libreria installata. Stanno qui lo stesso perche' la domanda che
+    #: il frontend fa e' la stessa — «posso offrire questo pulsante?» —
+    #: e due posti diversi da interrogare significherebbero un'interfaccia
+    #: che si configura per meta' da una parte e per meta' dall'altra.
+    VOICE_OUTPUT = "voice_output"
+    LIP_SYNC = "lip_sync"
 
     @property
     def label(self) -> str:
@@ -53,6 +61,8 @@ _FEATURE_LABELS: Dict[Feature, str] = {
     Feature.GGUF_EXPORT: "Esportazione in GGUF",
     Feature.KV_CACHE_CAG: "CAG con riuso della KV-cache",
     Feature.LOCAL_INFERENCE: "Inferenza su motore locale",
+    Feature.VOICE_OUTPUT: "Risposte a voce",
+    Feature.LIP_SYNC: "Labiale sincronizzato sull'audio",
 }
 
 #: Motivo esposto quando nessun worker offre la funzione. E' il caso piu'
@@ -75,6 +85,17 @@ _NO_WORKER_REASON = {
     ),
     Feature.LOCAL_INFERENCE: (
         "nessun motore di inferenza locale raggiungibile"
+    ),
+    Feature.VOICE_OUTPUT: (
+        "nessun fornitore di sintesi configurato: le risposte restano "
+        "scritte. Si abilita con `PERSONA_TTS_ENABLED` e l'indirizzo di un "
+        "servizio compatibile"
+    ),
+    Feature.LIP_SYNC: (
+        "i tempi delle parole non si possono misurare (manca faster-whisper, "
+        "o l'allineamento e' disattivato): la voce funziona, l'avatar non "
+        "muove la bocca. Un labiale animato su una stima si vedrebbe fuori "
+        "sincrono, che e' peggio di una bocca ferma"
     ),
 }
 
@@ -218,7 +239,10 @@ class CapabilityRegistry:
         return sorted(found, key=lambda w: w.worker_id)
 
     def platform_capabilities(
-        self, *, local_engines: Optional[List[str]] = None
+        self,
+        *,
+        local_engines: Optional[List[str]] = None,
+        voice: Optional[Dict[Feature, bool]] = None,
     ) -> PlatformCapabilities:
         """Unione delle capacita' dei worker vivi.
 
@@ -236,7 +260,13 @@ class CapabilityRegistry:
             Feature.GGUF_EXPORT: any(w.capabilities.can_quantize_gguf for w in workers),
             Feature.LOCAL_INFERENCE: bool(engines),
             Feature.KV_CACHE_CAG: bool(engines),
+            # Dalla configurazione del servizio, non dai worker: chi
+            # chiama le passa perche' solo il processo API sa cosa ha
+            # configurato, e il registro non deve leggere impostazioni.
+            Feature.VOICE_OUTPUT: False,
+            Feature.LIP_SYNC: False,
         }
+        features.update(voice or {})
 
         reasons: Dict[Feature, str] = {}
         for feature, available in features.items():
@@ -247,10 +277,16 @@ class CapabilityRegistry:
         return PlatformCapabilities(features=features, reasons=reasons, workers=workers)
 
     def can(
-        self, feature: Feature, *, local_engines: Optional[List[str]] = None
+        self,
+        feature: Feature,
+        *,
+        local_engines: Optional[List[str]] = None,
+        voice: Optional[Dict[Feature, bool]] = None,
     ) -> Tuple[bool, str]:
         """Scorciatoia per il controllo negli endpoint."""
-        return self.platform_capabilities(local_engines=local_engines).can(feature)
+        return self.platform_capabilities(
+            local_engines=local_engines, voice=voice,
+        ).can(feature)
 
     # ------------------------------------------------------------ spiegazioni
 
