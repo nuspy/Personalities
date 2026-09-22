@@ -68,6 +68,13 @@ def get_llm_provider():
     ci sia. Non tiene connessioni aperte: il client HTTP nasce e muore dentro
     ciascuna generazione.
     """
+    from ..settings import get_settings
+
+    if get_settings().llm_provider == "anthropic":
+        from ..llm.anthropic import AnthropicProvider
+
+        return AnthropicProvider()
+
     from ..llm.openai_compatible import OpenAICompatibleProvider
 
     return OpenAICompatibleProvider()

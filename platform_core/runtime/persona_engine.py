@@ -27,8 +27,10 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
 
 from ..domain.knowledge_models import PersonalityVersion
 from ..knowledge.retriever import EsitoRecupero, Retriever
-from ..llm.base import GenerationRequest, LLMProvider, Message, StreamChunk, Usage
+from ..llm.base import CacheHint, GenerationRequest, LLMProvider, Message, StreamChunk, Usage
+from ..settings import get_settings
 from ..observability.tracing import traccia
+from .context_strategy import ContextStrategy, scegli_strategia
 from .context_builder import (
     ContestoCostruito, ContextBuilder, StratoStabile, StratoVolatile,
     strato_volatile_da_recupero,
@@ -46,6 +48,7 @@ class EsitoTurno:
 
     testo: str = ""
     usage: Optional[Usage] = None
+    cache: Optional[CacheHint] = None
     recupero: Optional[EsitoRecupero] = None
     contesto: Optional[ContestoCostruito] = None
     modo: str = "rag"
@@ -64,6 +67,14 @@ class EsitoTurno:
             "usage": {
                 **(self.usage.to_dict() if self.usage else {}),
                 "contesto": self.contesto.to_dict() if self.contesto else None,
+                # Quale strategia ha servito il prefisso, e con che chiave:
+                # insieme ai token letti da cache è ciò che dice se il
+                # risparmio è avvenuto e perché no quando non avviene.
+                "strategia": (
+                    {"nome": self.cache.strategia, "modo": self.cache.modo,
+                     "chiave": self.cache.chiave, "slot": self.cache.slot}
+                    if self.cache else None
+                ),
             },
             "latency_ms": self.tempi_ms,
             "modo": {
@@ -113,10 +124,17 @@ class PersonaEngine:
         *,
         retriever: Optional[Retriever] = None,
         builder: Optional[ContextBuilder] = None,
+        strategia: Optional[ContextStrategy] = None,
     ) -> None:
         self._provider = provider
         self._retriever = retriever
         self._builder = builder or ContextBuilder()
+        #: Come il prefisso stabile viene fatto riconoscere al motore. Scelta
+        #: dal fornitore se non indicata: è lui a sapere se dietro c'è una
+        #: KV-cache locale, un prompt caching cloud o niente.
+        self.strategia = strategia or scegli_strategia(
+            provider, slot=get_settings().llm_kv_slots,
+        )
 
     async def prepara(
         self,
@@ -190,6 +208,10 @@ class PersonaEngine:
             max_tokens=llm_config.get("max_tokens"),
             cache_breakpoint_after=turno.contesto.punto_di_cache,
         )
+        richiesta = self.strategia.applica(
+            richiesta, testo_stabile=turno.contesto.testo_stabile,
+        )
+        turno.cache = richiesta.cache
 
         pezzi: List[str] = []
         inizio = time.perf_counter()

@@ -49,10 +49,15 @@ class OpenAICompatibleProvider(LLMProvider):
         timeout: Optional[float] = None,
         settings: Optional[Settings] = None,
         name: str = "openai-compatibile",
+        motore: Optional[str] = None,
     ) -> None:
         settings = settings or get_settings()
         self.name = name
         self._base_url = (base_url or settings.llm_base_url).rstrip("/")
+        #: Il motore dietro l'indirizzo: decide quale `ContextStrategy` si usa
+        #: e quali campi di cache si possono mandare. Dichiarato qui perché è
+        #: il fornitore a sapere a cosa sta parlando.
+        self.motore = motore or riconosci_motore(self._base_url, settings.llm_engine)
         self._api_key = api_key or settings.llm_api_key
         self._default_model = default_model or settings.llm_model
         self._timeout = timeout or settings.llm_stream_timeout
@@ -282,8 +287,36 @@ class OpenAICompatibleProvider(LLMProvider):
             # eventi di streaming, e la contabilità dei token resta vuota
             # proprio nel percorso che si usa sempre.
             payload["stream_options"] = {"include_usage": True}
+        payload.update(self._campi_di_cache(request))
         payload.update(request.extra)
         return payload
+
+    def _campi_di_cache(self, request: GenerationRequest) -> Dict[str, Any]:
+        """Traduce l'indicazione di cache nei campi che questo motore capisce.
+
+        Solo quelli che il motore conosce, e solo per lui: vLLM rifiuta o
+        segnala i campi sconosciuti, e mandare `cache_prompt` a OpenAI o
+        `prompt_cache_key` a un llama.cpp sarebbe nel migliore dei casi
+        inutile e nel peggiore un 400 su ogni risposta.
+        """
+        suggerimento = request.cache
+        if suggerimento is None or suggerimento.modo == "none":
+            return {}
+
+        if self.motore == "llamacpp" and suggerimento.modo == "kv":
+            campi: Dict[str, Any] = {"cache_prompt": True}
+            if suggerimento.slot is not None:
+                campi["id_slot"] = suggerimento.slot
+            return campi
+
+        if self.motore == "openai" and suggerimento.modo == "prompt":
+            # Il caching di OpenAI è automatico sopra i 1024 token; la chiave
+            # instrada le richieste con lo stesso prefisso verso la stessa
+            # macchina, dove il prefisso è già in cache.
+            return {"prompt_cache_key": suggerimento.chiave}
+
+        # vLLM e LM Studio riusano il prefisso da sé: non serve nessun campo.
+        return {}
 
     @staticmethod
     def _parse_usage(uso: Dict[str, Any], model: str) -> Usage:
@@ -295,6 +328,28 @@ class OpenAICompatibleProvider(LLMProvider):
             total_tokens=uso.get("total_tokens", 0),
             model=model,
         )
+
+
+def riconosci_motore(base_url: str, configurato: str = "auto") -> str:
+    """Che motore sta dietro un indirizzo OpenAI-compatibile.
+
+    Dall'indirizzo si riconoscono con sicurezza solo i casi comuni: OpenAI dal
+    dominio, LM Studio e llama.cpp dalle loro porte predefinite. Un vLLM o un
+    llama.cpp dietro un nome qualunque restano `other` — cioè prezzo pieno —
+    finché qualcuno non lo dichiara in `PERSONA_LLM_ENGINE`. Indovinare un
+    motore con cache e sbagliare manderebbe campi che il server rifiuta.
+    """
+    if configurato and configurato != "auto":
+        return configurato
+
+    indirizzo = base_url.lower()
+    if "api.openai.com" in indirizzo:
+        return "openai"
+    if ":1234" in indirizzo:
+        return "lmstudio"
+    if ":8080" in indirizzo and ("127.0.0.1" in indirizzo or "localhost" in indirizzo):
+        return "llamacpp"
+    return "other"
 
 
 def _formato(dialetto: Optional[str]) -> Dict[str, Any]:

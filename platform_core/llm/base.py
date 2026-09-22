@@ -90,6 +90,32 @@ class TruncatedResponse(GenerationError):
         self.usage = usage
 
 
+@dataclass(frozen=True)
+class CacheHint:
+    """Come far riconoscere al motore la parte stabile del prompt.
+
+    Neutro rispetto al fornitore: lo scrive una `ContextStrategy`, lo traduce
+    ciascun fornitore nel proprio meccanismo — `cache_control` per Anthropic,
+    `prompt_cache_key` per OpenAI, `cache_prompt` e uno slot fisso per
+    llama.cpp — e chi non sa cosa farsene lo ignora. Il testo dei messaggi non
+    cambia mai: l'indicazione dice *dove* finisce il prefisso e *come*
+    chiamarlo, non cosa contiene.
+    """
+
+    #: `kv` (riuso della KV-cache su un motore locale), `prompt` (prompt
+    #: caching del fornitore), `none`.
+    modo: str = "none"
+    #: Identificativo stabile del prefisso: lo stesso per tutte le richieste
+    #: che condividono lo strato 0, cioè per la stessa versione della stessa
+    #: personalità. Deriva dal testo e non da un id, così che due versioni con
+    #: lo stesso prompt condividano la cache e una versione modificata no.
+    chiave: str = ""
+    #: Per llama.cpp: lo slot a cui inviare il prefisso, perché resti caldo.
+    slot: Optional[int] = None
+    #: Il nome della strategia che l'ha prodotta, per la traccia.
+    strategia: str = ""
+
+
 @dataclass
 class GenerationRequest:
     """Cosa si chiede al modello.
@@ -106,6 +132,7 @@ class GenerationRequest:
     max_tokens: Optional[int] = None
     stop: List[str] = field(default_factory=list)
     cache_breakpoint_after: Optional[int] = None
+    cache: Optional[CacheHint] = None
     extra: Dict[str, Any] = field(default_factory=dict)
 
 

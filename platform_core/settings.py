@@ -95,6 +95,26 @@ class Settings(BaseSettings):
     #: legittima, un silenzio di due minuti no.
     llm_stream_timeout: float = 120.0
 
+    #: Quale fornitore genera le risposte: `openai-compatible` (OpenAI, LM
+    #: Studio, vLLM, llama.cpp e affini) o `anthropic`.
+    llm_provider: str = "openai-compatible"
+    #: Che motore sta dietro `llm_base_url`: decide la `ContextStrategy`.
+    #: `auto` lo deduce dall'indirizzo; si imposta a mano quando l'indirizzo
+    #: non basta a riconoscerlo — un vLLM dietro un nome di dominio qualunque.
+    #: Valori: auto, openai, vllm, llamacpp, lmstudio, other.
+    llm_engine: str = "auto"
+    #: Slot paralleli del server llama.cpp (`--parallel`). Serve a mandare lo
+    #: stesso prefisso sempre allo stesso slot, dove la KV-cache e' calda.
+    llm_kv_slots: int = 1
+
+    #: Anthropic, quando `llm_provider = anthropic`.
+    anthropic_base_url: str = "https://api.anthropic.com"
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-5"
+    #: Il Messages API pretende `max_tokens`: questo e' il valore quando la
+    #: versione della personalita' non ne indica uno.
+    anthropic_max_tokens: int = 2048
+
     #: Vettorizzazione. Separata dalla generazione perche' i due servizi
     #: possono stare su macchine diverse: l'embedding e' leggero e conviene
     #: tenerlo vicino al database, la generazione vuole l'acceleratore.
