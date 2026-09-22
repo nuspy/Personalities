@@ -20,6 +20,7 @@ import {
 import stili from "./page.module.css";
 import { Dettatura } from "./dettatura";
 import { LinkSezioni } from "./navigazione";
+import { Voto } from "./voto";
 import {
   BottoneAscolto,
   Ritratto,
@@ -37,6 +38,9 @@ interface Turno {
   errore?: string;
   inventati?: string[];
   verifica?: Verifica;
+  /** Arriva a risposta salvata: senza, non c'è niente da votare. */
+  messageId?: string;
+  voto?: number | null;
 }
 
 function adesso(): string {
@@ -302,6 +306,8 @@ function Conversazione() {
               chi: m.role === "user" ? "utente" : "voce",
               testo: m.content,
               ora: oraDi(new Date(m.created_at)),
+              messageId: m.role === "assistant" ? m.id : undefined,
+              voto: m.voto ?? null,
             })),
         ),
       )
@@ -402,6 +408,9 @@ function Conversazione() {
             break;
           case "verifica":
             aggiornaUltimo((t) => ({ ...t, verifica: evento.verifica }));
+            break;
+          case "salvato":
+            aggiornaUltimo((t) => ({ ...t, messageId: evento.messageId }));
             break;
         }
       }
@@ -682,6 +691,9 @@ function Riga({
             />
             {inAscolto && voce.errore && (
               <span className={stili.erroreVoce}>{voce.errore}</span>
+            )}
+            {turno.messageId && (
+              <Voto key={turno.messageId} messageId={turno.messageId} iniziale={turno.voto} />
             )}
           </div>
         )}

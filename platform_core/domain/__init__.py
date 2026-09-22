@@ -13,7 +13,7 @@ resto: il vincolo è soddisfatto da qualunque strada si entri.
 """
 from . import (  # noqa: F401
     avatar_models, base, billing_models, build_models, knowledge_models,
-    memory_models, models,
+    lab_models, memory_models, models,
 )
 
 from .avatar_models import Avatar
@@ -24,11 +24,14 @@ from .knowledge_models import (
     DIMENSIONI_EMBEDDING, AnswerTrace, Chunk, ChunkVector, Document,
     KnowledgeBase, Personality, PersonalityKnowledgeBase, PersonalityVersion,
 )
+from .lab_models import AnswerFeedback, Experiment
 from .memory_models import Memory, MemoryAccess
 from .models import AuditLog, Conversation, Message, User
 
 __all__ = [
+    "AnswerFeedback",
     "Avatar",
+    "Experiment",
     "DIMENSIONI_EMBEDDING",
     "AnswerTrace",
     "AuditLog",

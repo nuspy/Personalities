@@ -1,0 +1,136 @@
+.elenco {
+  list-style: none;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  border-top: 1px solid var(--filo);
+}
+
+.voce {
+  border-bottom: 1px solid var(--filo);
+}
+
+.voceTesta {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.75rem;
+  align-items: baseline;
+  padding: 0.9rem 0.25rem;
+  min-height: 56px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.voceTesta:hover {
+  background: var(--superficie-alta);
+}
+
+.statoAttivo,
+.statoConcluso {
+  font-family: var(--apparato), monospace;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+}
+
+.statoAttivo {
+  border-color: var(--quiete);
+  color: var(--quiete);
+}
+
+.statoConcluso {
+  color: var(--inchiostro-debole);
+}
+
+.voceNome {
+  font-weight: 600;
+}
+
+.voceDettagli {
+  grid-column: 2;
+  font-size: 0.8125rem;
+  color: var(--inchiostro-tenue);
+}
+
+.dettaglio {
+  padding: 0.5rem 0 1.25rem;
+}
+
+.ipotesi {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: 0 0 1rem;
+}
+
+.riferimento {
+  font-size: 0.75rem;
+  color: var(--inchiostro-debole);
+  font-weight: 400;
+}
+
+.esito {
+  margin-top: 1rem;
+  font-size: 0.9375rem;
+}
+
+.spunta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  font-size: 0.875rem;
+  color: var(--inchiostro-tenue);
+}
+
+.spunta input,
+.versione input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--inchiostro);
+}
+
+.versioni {
+  border: 0;
+  padding: 0;
+  margin: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.versione {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  min-height: 48px;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--filo-tenue);
+  border-radius: var(--raggio);
+  font-size: 0.875rem;
+}
+
+.anteprima {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--inchiostro-debole);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peso {
+  width: 4.5rem;
+  min-height: 40px;
+  padding: 0 0.5rem;
+  border: 1px solid var(--filo);
+  background: var(--superficie);
+  color: var(--inchiostro);
+  font-size: 1rem;
+}

@@ -135,7 +135,10 @@ class TestFlusso:
         eventi = eventi_di(risposta.text)
         tipi = [e[0] for e in eventi]
         assert tipi[0] == "start"
-        assert tipi[-1] == "done"
+        # `done` chiude la risposta; dopo arriva solo `salvato`, con
+        # l'identificativo che serve a votarla — la riga esiste solo a
+        # risposta scritta.
+        assert tipi[-2:] == ["done", "salvato"]
         assert tipi.count("token") == 3
 
         testo = "".join(d["text"] for t, d in eventi if t == "token")
@@ -155,9 +158,21 @@ class TestFlusso:
         installa_modello(client, ModelloFinto())
 
         risposta = await client.post("/chat", json={"message": "ciao"})
-        _, finale = eventi_di(risposta.text)[-1]
+        finale = next(d for t, d in eventi_di(risposta.text) if t == "done")
 
         assert finale["usage"]["total_tokens"] == 15
+
+    async def test_la_risposta_salvata_si_puo_votare(self, client, monkeypatch):
+        installa_modello(client, ModelloFinto())
+
+        risposta = await client.post("/chat", json={"message": "ciao"})
+        salvato = next(d for t, d in eventi_di(risposta.text) if t == "salvato")
+
+        voto = await client.put(
+            f"/messages/{salvato['message_id']}/feedback", json={"voto": 1},
+        )
+        assert voto.status_code == 200
+        assert voto.json()["voto"] == 1
 
     async def test_il_ragionamento_non_esce(self, client, monkeypatch):
         """Il pensiero del modello si segnala, non si trasmette."""

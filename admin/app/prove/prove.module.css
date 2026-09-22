@@ -1,0 +1,158 @@
+.banco {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.areaTesto {
+  min-height: auto;
+  padding: 0.6rem 0.7rem;
+  font-family: var(--apparato), monospace;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.cursore {
+  width: 100%;
+  min-height: 44px;
+  accent-color: var(--inchiostro);
+}
+
+.spunta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  font-size: 0.875rem;
+  color: var(--inchiostro-tenue);
+}
+
+.spunta input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--inchiostro);
+}
+
+.modifiche {
+  font-size: 0.8125rem;
+  color: var(--rubrica);
+  align-self: center;
+}
+
+/* Le due risposte una accanto all'altra su schermo largo, una sotto l'altra
+ * sul telefono: il confronto si fa a colpo d'occhio solo se stanno alla
+ * stessa altezza. */
+.affiancati {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.esito {
+  border: 1px solid var(--filo);
+  background: var(--superficie);
+  border-radius: var(--raggio);
+  padding: 1rem;
+  min-width: 0;
+}
+
+.esitoTitolo {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--inchiostro-debole);
+  margin: 0 0 0.6rem;
+}
+
+.risposta {
+  font-family: var(--lettura), serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.misure {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  margin: 1rem 0 0;
+  font-size: 0.75rem;
+}
+
+.misure div {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.misure dt {
+  color: var(--inchiostro-debole);
+}
+
+.misure dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.piega {
+  margin-top: 0.9rem;
+  border-top: 1px solid var(--filo-tenue);
+  padding-top: 0.6rem;
+}
+
+.piega summary {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--inchiostro-tenue);
+}
+
+.passaggi {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.passaggi li + li {
+  margin-top: 0.5rem;
+}
+
+.estratto {
+  color: var(--inchiostro-tenue);
+}
+
+.messaggio {
+  margin-top: 0.6rem;
+}
+
+.ruolo {
+  font-family: var(--apparato), monospace;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  color: var(--inchiostro-debole);
+}
+
+.cache {
+  color: var(--rubrica);
+  text-transform: none;
+}
+
+.contenuto {
+  margin: 0.25rem 0 0;
+  padding: 0.6rem 0.7rem;
+  background: var(--superficie-alta);
+  border: 1px solid var(--filo-tenue);
+  border-radius: var(--raggio);
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 20rem;
+  overflow-y: auto;
+}

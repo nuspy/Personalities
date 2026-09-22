@@ -1,0 +1,33 @@
+.filtri {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 1.25rem;
+}
+
+.periodo,
+.periodoScelto {
+  min-height: 44px;
+  padding: 0 0.9rem;
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  background: transparent;
+  color: var(--inchiostro-tenue);
+  font-size: 0.8125rem;
+}
+
+.periodoScelto {
+  background: var(--inchiostro);
+  border-color: var(--inchiostro);
+  color: var(--carta);
+}
+
+.inRicarica {
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+
+.nota {
+  font-size: 0.8125rem;
+  color: var(--inchiostro-tenue);
+}

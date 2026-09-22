@@ -548,3 +548,133 @@ export const registro = (t: string, filtro?: string) =>
     t,
     `/admin/audit${filtro ? `?azione=${encodeURIComponent(filtro)}` : ""}`,
   );
+
+/* ---- laboratorio: analisi, esperimenti, prove ---- */
+
+export interface Indicatori {
+  risposte: number;
+  utenti_attivi: number;
+  conversazioni_nuove: number;
+  crediti: number;
+  voti: { su: number; giu: number; approvazione: number | null };
+  citazioni_inventate: number | null;
+  verifica: { verificate: number; fondate: number; quota: number | null };
+  primo_token_ms: { p50: number | null; p95: number | null };
+  cache: { token_prompt: number; token_da_cache: number; quota: number | null };
+}
+
+export interface Analisi {
+  periodo: { dal: string; al: string; giorni: number };
+  indicatori: Indicatori;
+  precedente: Indicatori;
+  al_giorno: { giorno: string; risposte: number; utenti: number }[];
+  per_personalita: {
+    slug: string;
+    nome: string;
+    risposte: number;
+    utenti: number;
+    su: number;
+    giu: number;
+    approvazione: number | null;
+  }[];
+}
+
+export const leggiAnalisi = (t: string, giorni: number) =>
+  chiamata<Analisi>(t, `/admin/analytics?giorni=${giorni}`);
+
+export interface VarianteEsperimento {
+  version_id: string;
+  peso: number;
+  etichetta: string;
+  versione?: number;
+}
+
+export interface Esperimento {
+  id: string;
+  personality_id: string;
+  nome: string;
+  ipotesi: string | null;
+  stato: "attivo" | "concluso";
+  varianti: VarianteEsperimento[];
+  iniziato_il: string;
+  concluso_il: string | null;
+  vincitore: string | null;
+  conclusione: string | null;
+  personalita?: { slug: string; nome: string };
+}
+
+export interface RisultatoVariante {
+  etichetta: string;
+  version_id: string;
+  peso: number;
+  conversazioni: number;
+  utenti: number;
+  risposte: number;
+  su: number;
+  giu: number;
+  approvazione: number | null;
+  primo_token_ms_p50: number | null;
+  citazioni_inventate: number | null;
+  confronto?: {
+    tasso_riferimento: number | null;
+    tasso_variante: number | null;
+    differenza: number | null;
+    z: number | null;
+    p: number | null;
+    verdetto: string;
+  };
+}
+
+export const elencoEsperimenti = (t: string) =>
+  chiamata<Esperimento[]>(t, "/admin/experiments");
+
+export const dettaglioEsperimento = (t: string, id: string) =>
+  chiamata<Esperimento & { risultati: { varianti: RisultatoVariante[]; voti_minimi: number } }>(
+    t, `/admin/experiments/${id}`,
+  );
+
+export const apriEsperimento = (
+  t: string,
+  personalitaId: string,
+  corpo: { nome: string; ipotesi?: string; varianti: { version_id: string; peso: number }[] },
+) =>
+  chiamata<Esperimento>(t, `/admin/personalities/${personalitaId}/experiments`, {
+    method: "POST",
+    body: JSON.stringify(corpo),
+  });
+
+export const concludiEsperimento = (
+  t: string,
+  id: string,
+  corpo: { vincitore: string | null; conclusione?: string; pubblica: boolean },
+) =>
+  chiamata<Esperimento & { pubblicata: boolean }>(t, `/admin/experiments/${id}/conclude`, {
+    method: "POST",
+    body: JSON.stringify(corpo),
+  });
+
+export interface EsitoPlayground {
+  risposta: string;
+  versione: { id: string; numero: number; modificata: boolean };
+  prompt: { role: string; content: string }[];
+  punto_di_cache: number | null;
+  passaggi: { etichetta: string; documento: string; sezione: string | null; estratto: string }[];
+  riferimenti_inventati: string[];
+  uso: { prompt_tokens: number; completion_tokens: number; cached_tokens: number; total_tokens: number } | null;
+  strategia: { nome: string; modo: string; chiave: string; slot: number | null } | null;
+  tempi_ms: Record<string, number>;
+}
+
+export const provaPrompt = (
+  t: string,
+  corpo: {
+    personality_id: string;
+    version_id?: string;
+    system_prompt?: string;
+    regole?: string[];
+    temperature?: number;
+    max_chunks?: number;
+    domanda: string;
+  },
+) =>
+  chiamata<EsitoPlayground>(t, "/admin/playground", { method: "POST", body: JSON.stringify(corpo) });

@@ -119,6 +119,13 @@ class Conversation(Base, TimestampMixin, OwnedMixin):
     #: dopo l'estrazione, `last_message_at` supera il segno e la conversazione
     #: torna fra quelle da estrarre, invece di restare ferma alla prima volta.
     memories_extracted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    #: L'esperimento che ha scelto la versione, se una l'ha scelta. Insieme a
+    #: `personality_version_id` dice in quale variante sta la conversazione:
+    #: la versione da sola non basta, perché la stessa versione può essere
+    #: servita anche fuori da un esperimento, prima o dopo.
+    experiment_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("experiments.id", ondelete="SET NULL"), index=True,
+    )
 
     owner: Mapped[Optional[User]] = relationship(back_populates="conversations")
     messages: Mapped[List["Message"]] = relationship(

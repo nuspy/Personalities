@@ -35,6 +35,8 @@ from ...billing.quote import ContatoreQuote, QuotaSuperata
 from ...billing.tariffe import costo_risposta
 from ...api.deps import get_embedder, get_guardrail, get_llm_provider
 from ...domain.knowledge_models import CommercialCategory, Personality, PersonalityVersion
+from ...domain.lab_models import AnswerFeedback
+from ...lab.esperimenti import GestoreEsperimenti
 from ...domain.models import Conversation
 from ...domain.repositories import (
     ConversationRepository, PersonalityRepository, TraceRepository,
@@ -189,9 +191,21 @@ async def chat(
                 detail="Conversazione non trovata",
             )
     else:
+        esperimento_id = None
+        if versione is not None:
+            # Un esperimento attivo sceglie la versione di chi apre la
+            # conversazione — sempre la stessa per la stessa persona — e la
+            # scelta resta sulla conversazione, come ogni versione.
+            assegnata = await GestoreEsperimenti(session).versione_per(
+                versione.personality_id, user.id,
+            )
+            if assegnata is not None:
+                esperimento, versione = assegnata
+                esperimento_id = esperimento.id
         conversazione = await repo.create(
             user, title=payload.message[:80].strip() or None
         )
+        conversazione.experiment_id = esperimento_id
         if versione is not None:
             conversazione.personality_id = versione.personality_id
             # La versione si fissa all'apertura e non si risolve a ogni turno:
@@ -481,6 +495,9 @@ async def chat(
                             grounding=esito.to_dict(),
                         )
                     await scrittura.commit()
+                    # L'identificativo della risposta, per votarla: arriva per
+                    # ultimo perché la riga esiste solo adesso.
+                    yield sse("salvato", {"message_id": str(messaggio.id)})
 
     return StreamingResponse(
         flusso(),
@@ -572,12 +589,80 @@ async def messaggi(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Conversazione non trovata",
         )
+    messaggi = await repo.messages(user, conversation_id)
+    voti = dict((await session.execute(
+        select(AnswerFeedback.message_id, AnswerFeedback.vote).where(
+            AnswerFeedback.message_id.in_([m.id for m in messaggi]),
+            AnswerFeedback.user_id == user.id,
+        )
+    )).all()) if messaggi else {}
     return [
         {
             "id": str(m.id),
             "role": m.role,
             "content": m.content,
             "created_at": m.created_at.isoformat(),
+            "voto": voti.get(m.id),
         }
-        for m in await repo.messages(user, conversation_id)
+        for m in messaggi
     ]
+
+
+class Voto(BaseModel):
+    voto: int = Field(description="1 approva, -1 disapprova")
+    motivo: Optional[str] = Field(default=None, max_length=1000)
+
+
+async def _risposta_propria(session, user, message_id: uuid.UUID):
+    """La risposta, se è di una conversazione di chi chiede.
+
+    404 anche quando esiste ma è di altri: distinguere rivelerebbe quali
+    identificativi esistono.
+    """
+    from ...domain.models import Message
+
+    messaggio = (await session.execute(
+        select(Message)
+        .join(Conversation, Conversation.id == Message.conversation_id)
+        .where(
+            Message.id == message_id,
+            Message.role == "assistant",
+            Conversation.owner_id == user.id,
+        )
+    )).scalar_one_or_none()
+    if messaggio is None:
+        raise HTTPException(status_code=404, detail="Risposta non trovata")
+    return messaggio
+
+
+@router.put("/messages/{message_id}/feedback")
+async def vota(
+    message_id: uuid.UUID, payload: Voto, user: CurrentUser, session: DbSession,
+) -> Dict[str, Any]:
+    """Approva o disapprova una risposta. Rivotare cambia il voto."""
+    if payload.voto not in (1, -1):
+        raise HTTPException(status_code=422, detail="Il voto è 1 oppure -1.")
+    await _risposta_propria(session, user, message_id)
+
+    voto = await session.get(AnswerFeedback, message_id)
+    if voto is None:
+        voto = AnswerFeedback(message_id=message_id, user_id=user.id, vote=payload.voto)
+        session.add(voto)
+    voto.vote = payload.voto
+    # Il motivo vale per il voto a cui si accompagna: passando da contrario a
+    # favorevole, «troppo lunga» non descrive più niente.
+    voto.reason = (payload.motivo or "").strip() or None
+    await session.commit()
+    return {"message_id": str(message_id), "voto": voto.vote}
+
+
+@router.delete("/messages/{message_id}/feedback")
+async def togli_voto(
+    message_id: uuid.UUID, user: CurrentUser, session: DbSession,
+) -> Dict[str, Any]:
+    await _risposta_propria(session, user, message_id)
+    voto = await session.get(AnswerFeedback, message_id)
+    if voto is not None:
+        await session.delete(voto)
+        await session.commit()
+    return {"message_id": str(message_id), "voto": None}

@@ -83,6 +83,14 @@
   white-space: nowrap;
 }
 
+/* Con nove sezioni la testata non ha posto per l'indirizzo sotto una certa
+ * larghezza: è un promemoria di chi si è, e la navigazione vale di più. */
+@media (max-width: 75rem) {
+  .chi {
+    display: none;
+  }
+}
+
 .esci {
   height: 40px;
   min-height: 40px;

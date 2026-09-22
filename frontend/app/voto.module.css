@@ -1,0 +1,75 @@
+.voto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pulsanti {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.pulsante,
+.scelto {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--filo);
+  background: transparent;
+  color: var(--inchiostro-debole);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.pulsante:hover {
+  border-color: var(--inchiostro-debole);
+  color: var(--inchiostro);
+}
+
+/* Il voto dato si riconosce dall'icona piena, non solo dal colore. */
+.scelto {
+  border-color: var(--inchiostro-tenue);
+  color: var(--inchiostro);
+}
+
+.motivo {
+  display: flex;
+  gap: 0.35rem;
+  flex: 1 1 16rem;
+}
+
+.campo {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 0.7rem;
+  border: 1px solid var(--filo);
+  background: var(--superficie);
+  color: var(--inchiostro);
+  font-size: 1rem;
+  font-family: var(--interfaccia), sans-serif;
+}
+
+.invia {
+  min-height: 44px;
+  padding: 0 0.9rem;
+  border: 1px solid var(--inchiostro);
+  background: var(--inchiostro);
+  color: var(--carta);
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.8125rem;
+}
+
+.invia:disabled {
+  opacity: 0.4;
+}
+
+.grazie {
+  font-size: 0.8125rem;
+  color: var(--inchiostro-tenue);
+}
+
+.errore {
+  font-size: 0.8125rem;
+  color: var(--allarme);
+}

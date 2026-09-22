@@ -21,6 +21,7 @@ export interface MessaggioSalvato {
   role: "user" | "assistant" | "system";
   content: string;
   created_at: string;
+  voto?: number | null;
 }
 
 export interface Consumo {
@@ -63,7 +64,9 @@ export type EventoChat =
   | { tipo: "fine"; consumo: Consumo | null; inventati: string[] }
   /* Arriva **dopo** `fine`: il giudizio costa una chiamata intera, e chi
      ha già finito di leggere non deve aspettarlo. */
-  | { tipo: "verifica"; verifica: Verifica };
+  | { tipo: "verifica"; verifica: Verifica }
+  /* Per ultimo: la risposta salvata, con l'identificativo per votarla. */
+  | { tipo: "salvato"; messageId: string };
 
 export class ErroreApi extends Error {
   constructor(message: string, readonly stato: number) {
@@ -248,6 +251,8 @@ function interpreta(blocco: string): EventoChat | null {
       };
     case "verifica":
       return { tipo: "verifica", verifica: corpo as unknown as Verifica };
+    case "salvato":
+      return { tipo: "salvato", messageId: String(corpo.message_id) };
     default:
       return null;
   }
@@ -463,6 +468,23 @@ export async function accessiMemorie(token: string): Promise<
   { action: string; actor_id: number | null; count: number; reason: string | null; created_at: string }[]
 > {
   return leggi(await fetch(`${API}/memory/accesses`, { headers: intestazioni(token) }));
+}
+
+/* ---- voti sulle risposte ---- */
+
+export async function votaRisposta(
+  token: string, messageId: string, voto: 1 | -1, motivo?: string,
+): Promise<{ voto: number | null }> {
+  return leggi(await fetch(`${API}/messages/${messageId}/feedback`, {
+    method: "PUT", headers: intestazioni(token),
+    body: JSON.stringify({ voto, motivo: motivo ?? null }),
+  }));
+}
+
+export async function togliVoto(token: string, messageId: string): Promise<{ voto: null }> {
+  return leggi(await fetch(`${API}/messages/${messageId}/feedback`, {
+    method: "DELETE", headers: intestazioni(token),
+  }));
 }
 
 /* ---- conversazioni ---- */

@@ -1,0 +1,278 @@
+/* I colori dei grafici. Una serie sola: il primo colore della palette di
+ * riferimento, un passo diverso per la carta scura. Validato su entrambe le
+ * superfici della console. */
+.figura,
+.tessera {
+  --serie: #2a78d6;
+  --serie-accesa: #1c5cab;
+}
+
+@media (prefers-color-scheme: dark) {
+  .figura,
+  .tessera {
+    --serie: #3987e5;
+    --serie-accesa: #6da7ec;
+  }
+}
+
+/* ---- stat tile ---- */
+
+.tessere {
+  display: grid;
+  /* Due per riga anche sul telefono: sette tessere in colonna sono sette
+   * schermate prima del primo grafico. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.tessera {
+  border: 1px solid var(--filo);
+  background: var(--superficie);
+  border-radius: var(--raggio);
+  padding: 0.9rem 1rem;
+}
+
+.tesseraEtichetta {
+  font-size: 0.8125rem;
+  color: var(--inchiostro-tenue);
+}
+
+.tesseraValore {
+  /* Il sans della console, non il serif dei titoli: un numero in un face
+   * da display si legge come decorazione. */
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0.2rem 0 0.15rem;
+  color: var(--inchiostro);
+}
+
+.deltaPari,
+.deltaBuono,
+.deltaCattivo {
+  font-size: 0.75rem;
+}
+
+.deltaPari {
+  color: var(--inchiostro-debole);
+}
+
+.deltaBuono {
+  color: var(--quiete);
+}
+
+.deltaCattivo {
+  color: var(--allarme);
+}
+
+.tesseraNota {
+  font-size: 0.75rem;
+  color: var(--inchiostro-debole);
+  margin-top: 0.25rem;
+}
+
+/* ---- figura ---- */
+
+.figura {
+  margin: 0 0 1.5rem;
+  border: 1px solid var(--filo);
+  background: var(--superficie);
+  border-radius: var(--raggio);
+  padding: 1rem 1rem 0.75rem;
+}
+
+.intestazione {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.titolo {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.descrizione {
+  font-size: 0.8125rem;
+  color: var(--inchiostro-tenue);
+  margin-top: 0.15rem;
+}
+
+.comandoTabella {
+  min-height: 40px;
+  padding: 0 0.75rem;
+  border: 1px solid var(--filo);
+  background: transparent;
+  color: var(--inchiostro-tenue);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.area {
+  position: relative;
+  width: 100%;
+}
+
+.svg {
+  display: block;
+  overflow: visible;
+}
+
+.svg:focus-visible {
+  outline: 2px solid var(--rubrica-tenue);
+  outline-offset: 4px;
+}
+
+.griglia {
+  stroke: var(--filo-tenue);
+  stroke-width: 1;
+}
+
+.asse {
+  stroke: var(--filo);
+  stroke-width: 1;
+}
+
+.tacca {
+  font-family: var(--apparato), monospace;
+  font-size: 10px;
+  fill: var(--inchiostro-debole);
+  font-variant-numeric: tabular-nums;
+}
+
+.valore {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--inchiostro);
+}
+
+.colonna {
+  fill: var(--serie);
+}
+
+.colonnaAccesa {
+  fill: var(--serie-accesa);
+}
+
+.suggerimento {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--inchiostro);
+  color: var(--carta);
+  border-radius: var(--raggio);
+  font-size: 0.75rem;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.suggerimento strong {
+  font-size: 0.9375rem;
+}
+
+/* ---- barre ---- */
+
+.barre {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.barraRiga {
+  display: grid;
+  grid-template-columns: minmax(7rem, 12rem) 1fr;
+  gap: 0.25rem 0.75rem;
+  align-items: center;
+}
+
+.barraEtichetta {
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barraTraccia {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.barra {
+  display: block;
+  height: 16px;
+  min-width: 2px;
+  background: var(--serie);
+  /* Estremità arrotondata sul valore, squadrata sulla base. */
+  border-radius: 0 4px 4px 0;
+}
+
+.barraValore {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.barraDettaglio {
+  grid-column: 2;
+  font-size: 0.75rem;
+  color: var(--inchiostro-debole);
+}
+
+/* ---- tabella e vuoto ---- */
+
+.contenitoreTabella {
+  overflow-x: auto;
+  max-height: 22rem;
+}
+
+.tabella {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.tabella th,
+.tabella td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--filo-tenue);
+  text-align: left;
+}
+
+.tabella th {
+  font-weight: 600;
+  color: var(--inchiostro-tenue);
+}
+
+.numero {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.vuoto {
+  font-size: 0.875rem;
+  color: var(--inchiostro-debole);
+  margin: 0.5rem 0;
+}
+
+@media (max-width: 40rem) {
+  .barraRiga {
+    grid-template-columns: 1fr;
+  }
+
+  .barraDettaglio {
+    grid-column: 1;
+  }
+}
