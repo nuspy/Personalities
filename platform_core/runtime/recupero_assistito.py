@@ -37,13 +37,20 @@ from ..llm.base import GenerationRequest, Message
 
 logger = logging.getLogger(__name__)
 
-#: Quanto può essere lunga una domanda riscritta. Corta per costruzione: è
-#: una interrogazione, non un riassunto, e una riscrittura che divaga
-#: recupera peggio dell'originale.
-TOKEN_DOMANDA = 120
-
-#: Il budget per la selezione: restituisce etichette, non prosa.
-TOKEN_SELEZIONE = 200
+#: Il tetto di token per la riscrittura e per la selezione.
+#:
+#: Largo, e non perché servano risposte lunghe — una interrogazione sta in
+#: quindici parole e una selezione in cinque etichette. È che **un modello che
+#: ragiona spende il budget prima di cominciare a scrivere**: con un tetto da
+#: centoventi token esaurisce il ragionamento e restituisce testo vuoto, e la
+#: funzione ricade sull'originale a ogni chiamata senza che nulla sembri
+#: rotto. Misurato su Bonsai 2 27B, che ragiona: falliva sempre.
+#:
+#: Su un modello che non ragiona non costa niente: si ferma da sé quando ha
+#: finito, e il tetto resta un tetto. Le riscritture che divagano le scarta
+#: comunque il controllo sulla lunghezza, più sotto.
+TOKEN_DOMANDA = 900
+TOKEN_SELEZIONE = 900
 
 #: Quanto di ciascun passaggio si mostra al selezionatore. Non serve tutto:
 #: per decidere se un passaggio c'entra bastano le prime righe, e mandarne
