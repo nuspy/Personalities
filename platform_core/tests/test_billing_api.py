@@ -84,6 +84,18 @@ async def categoria_gold(session) -> CommercialCategory:
     return categoria
 
 
+async def abbona(session, utente, slug: str):
+    """Un abbonamento pagato, preparato dal gestore.
+
+    Non dall'endpoint: un piano a pagamento nasce solo dall'evento firmato
+    del fornitore (vedi `test_pagamenti`), e qui serve soltanto averlo.
+    """
+    gestore = GestoreAbbonamenti(session)
+    abbonamento = await gestore.sottoscrivi(utente.id, await gestore.piano_per_slug(slug))
+    await session.flush()
+    return abbonamento
+
+
 async def _con_crediti(session, utente, quanti: int) -> None:
     if quanti:
         await RegistroCrediti(session).accredita(
@@ -114,14 +126,25 @@ class TestCatalogoEConto:
         assert conto["diritti"]["piano"] == "free"
         assert conto["diritti"]["predefiniti"] is True
 
-    async def test_sottoscrivere_accredita_il_primo_periodo(
-        self, client, piani, utente,
+    async def test_un_piano_a_pagamento_non_si_attiva_senza_pagare(
+        self, client, piani, utente, session,
     ):
+        """Il varco che c'era: l'endpoint attivava anche il piano più caro
+        senza passare da nessun pagamento."""
         risposta = await client.post("/me/subscription", json={"piano": "gold"})
 
+        assert risposta.status_code == 402
+        assert "/me/checkout" in risposta.json()["detail"]
+        assert await RegistroCrediti(session).saldo(utente.id) == 0
+
+    async def test_il_piano_gratuito_si_attiva_direttamente(
+        self, client, piani, utente,
+    ):
+        risposta = await client.post("/me/subscription", json={"piano": "free"})
+
         assert risposta.status_code == 201
-        assert risposta.json()["abbonamento"]["piano"] == "gold"
-        assert risposta.json()["saldo"] == 2000
+        assert risposta.json()["abbonamento"]["piano"] == "free"
+        assert risposta.json()["saldo"] == 50
 
     async def test_un_piano_inesistente_e_un_404(self, client, piani):
         risposta = await client.post("/me/subscription", json={"piano": "platino"})
@@ -130,11 +153,11 @@ class TestCatalogoEConto:
         assert "platino" in risposta.json()["detail"]
 
     async def test_disdire_lascia_l_abbonamento_vivo_fino_a_scadenza(
-        self, client, piani, utente,
+        self, client, piani, utente, session,
     ):
         """È già stato pagato: chiuderlo subito toglierebbe qualcosa a cui
         l'utente ha diritto."""
-        await client.post("/me/subscription", json={"piano": "gold"})
+        await abbona(session, utente, "gold")
 
         risposta = await client.post("/me/subscription/cancel")
 
@@ -147,7 +170,7 @@ class TestCatalogoEConto:
         self, client, piani, utente, session,
     ):
         """Un numero da solo non si può contestare."""
-        await client.post("/me/subscription", json={"piano": "gold"})
+        await abbona(session, utente, "gold")
 
         corpo = (await client.get("/me/credits")).json()
 
@@ -187,7 +210,7 @@ class TestDirittoEMoneta:
         categoria_gold.slug = "gold"
         await session.flush()
 
-        await client.post("/me/subscription", json={"piano": "gold"})
+        await abbona(session, utente, "gold")
         installa(client, ModelloBreve())
 
         risposta = await client.post(

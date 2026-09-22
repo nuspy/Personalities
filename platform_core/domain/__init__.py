@@ -18,7 +18,7 @@ from . import (  # noqa: F401
 
 from .avatar_models import Avatar
 from .base import Base, OwnedMixin, TimestampMixin, utcnow
-from .billing_models import CreditEntry, Plan, Subscription
+from .billing_models import CreditEntry, PaymentCheckout, PaymentEvent, Plan, Subscription
 from .build_models import Build, BuildEvent, RuntimeBinding
 from .knowledge_models import (
     DIMENSIONI_EMBEDDING, AnswerTrace, Chunk, ChunkVector, Document,
@@ -46,6 +46,8 @@ __all__ = [
     "Message",
     "OwnedMixin",
     "Personality",
+    "PaymentCheckout",
+    "PaymentEvent",
     "Plan",
     "PersonalityKnowledgeBase",
     "PersonalityVersion",

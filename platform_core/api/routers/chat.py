@@ -31,6 +31,7 @@ from ...auth.dependencies import CurrentUser, DbSession
 from ...billing.credits import CreditiInsufficienti, RegistroCrediti
 from ...billing.entitlements import puo_parlare_con
 from ...billing.plans import GestoreAbbonamenti
+from ...billing.quote import ContatoreQuote, QuotaSuperata
 from ...billing.tariffe import costo_risposta
 from ...api.deps import get_embedder, get_guardrail, get_llm_provider
 from ...domain.knowledge_models import CommercialCategory, PersonalityVersion
@@ -149,6 +150,34 @@ async def chat(
             )
         kb_ids = await personalita_repo.corpora(personalita)
         slug_personalita = personalita.slug
+
+    # -- limiti del piano ---------------------------------------------------
+    #
+    # Prima di creare la conversazione: un rifiuto per troppe conversazioni
+    # aperte non deve lasciarne una in più. Solo per le personalità e solo
+    # dove si fa pagare — senza catalogo l'installazione non addebita, e non
+    # avrebbe senso contingentare ciò che regala.
+    if versione is not None:
+        gestore_quote = GestoreAbbonamenti(session)
+        if await gestore_quote.tariffe_in_vigore():
+            try:
+                await ContatoreQuote(session).verifica_messaggio(
+                    user.id,
+                    await gestore_quote.diritti_di(user.id),
+                    nuova_conversazione=not payload.conversation_id,
+                )
+            except QuotaSuperata as exc:
+                # 429 per ciò che si libera col tempo, 403 per ciò che si
+                # libera agendo: sono due indicazioni diverse per chi le legge.
+                if exc.riprova_tra is not None:
+                    raise HTTPException(
+                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                        detail=exc.messaggio,
+                        headers={"Retry-After": str(exc.riprova_tra)},
+                    ) from exc
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail=exc.messaggio,
+                ) from exc
 
     if payload.conversation_id:
         conversazione = await repo.get(user, payload.conversation_id)
@@ -504,6 +533,25 @@ async def elenco_conversazioni(
         user, limit=min(limit, 200), offset=offset,
     )
     return [ConversationSummary.of(c) for c in conversazioni]
+
+
+@router.post("/conversations/{conversation_id}/archive")
+async def archivia_conversazione(
+    conversation_id: uuid.UUID, user: CurrentUser, session: DbSession,
+) -> Dict[str, Any]:
+    """Archivia una conversazione: resta leggibile, non conta più fra le aperte.
+
+    Senza questa strada un piano che consente cinque conversazioni sarebbe
+    bloccato per sempre alla sesta. Archiviare e non cancellare: le memorie
+    estratte da quella conversazione vi rimandano, e cancellarla lascerebbe
+    ricordi senza provenienza.
+    """
+    conversazione = await ConversationRepository(session).get(user, conversation_id)
+    if conversazione is None:
+        raise HTTPException(status_code=404, detail="Conversazione non trovata")
+    conversazione.status = "archived"
+    await session.commit()
+    return {"id": str(conversazione.id), "status": conversazione.status}
 
 
 @router.get("/conversations/{conversation_id}/messages")

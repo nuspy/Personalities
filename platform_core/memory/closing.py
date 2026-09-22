@@ -16,7 +16,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
 from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +27,7 @@ from ..domain.models import Conversation, Message
 from ..knowledge.embedding import Embedder
 from ..llm.base import Message as MessaggioLLM
 from .extraction import Estrattore
-from .store import MemoryStore
+from .store import MemoriaPiena, MemoryStore
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +58,17 @@ class ChiusuraConversazioni:
         session: AsyncSession,
         provider,
         embedder: Optional[Embedder] = None,
+        *,
+        limite_per_utente: Optional[Callable[[int], Awaitable[Optional[int]]]] = None,
     ) -> None:
         self._session = session
         self._estrattore = Estrattore(provider)
         self._store = MemoryStore(session, embedder)
+        #: Quante memorie il piano dell'utente consente. Una funzione e non un
+        #: numero perché la passata attraversa conversazioni di utenti diversi;
+        #: e passata da fuori perché la memoria non deve sapere che esistono
+        #: i piani — le due cose devono poter cambiare separatamente.
+        self._limite_per_utente = limite_per_utente
 
     async def da_chiudere(self, *, limite: int = 20) -> Sequence[Conversation]:
         """Le conversazioni ferme da abbastanza tempo e mai estratte.
@@ -117,21 +124,34 @@ class ChiusuraConversazioni:
             (m for m in messaggi if m.role == "user"), None,
         )
 
+        limite = (
+            await self._limite_per_utente(conversazione.owner_id)
+            if self._limite_per_utente else None
+        )
+
         estratte = await self._estrattore.estrai(turni)
+        salvate = 0
         for memoria in estratte:
-            await self._store.ricorda(
-                user_id=conversazione.owner_id,
-                content=memoria.contenuto,
-                kind=memoria.genere,
-                personality_id=conversazione.personality_id,
-                importance=memoria.importanza,
-                confidence=memoria.confidenza,
-                # Da quale messaggio viene: è la risposta a «perché ti
-                # ricordi questo?», e senza di essa la memoria è
-                # un'affermazione senza provenienza.
-                source_message_id=ultimo_utente.id if ultimo_utente else None,
-            )
-        esito.memorie = len(estratte)
+            try:
+                await self._store.ricorda(
+                    user_id=conversazione.owner_id,
+                    content=memoria.contenuto,
+                    kind=memoria.genere,
+                    personality_id=conversazione.personality_id,
+                    importance=memoria.importanza,
+                    confidence=memoria.confidenza,
+                    # Da quale messaggio viene: è la risposta a «perché ti
+                    # ricordi questo?», e senza di essa la memoria è
+                    # un'affermazione senza provenienza.
+                    source_message_id=ultimo_utente.id if ultimo_utente else None,
+                    limite=limite,
+                )
+            except MemoriaPiena:
+                # Il piano è pieno e questa conta meno di tutte le presenti:
+                # si rinuncia a lei, non alla conversazione.
+                continue
+            salvate += 1
+        esito.memorie = salvate
 
         riassunto = await self._estrattore.riassumi(turni)
         if riassunto:

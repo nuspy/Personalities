@@ -40,6 +40,8 @@ logger = logging.getLogger(__name__)
 @dataclass
 class EsitoPassata:
     rinnovati: int = 0
+    conversazioni_chiuse: int = 0
+    memorie_estratte: int = 0
     piani_base_aperti: int = 0
     crediti_accreditati: int = 0
     abbonamenti_chiusi: int = 0
@@ -53,6 +55,8 @@ class EsitoPassata:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "rinnovati": self.rinnovati,
+            "conversazioni_chiuse": self.conversazioni_chiuse,
+            "memorie_estratte": self.memorie_estratte,
             "piani_base_aperti": self.piani_base_aperti,
             "crediti_accreditati": self.crediti_accreditati,
             "abbonamenti_chiusi": self.abbonamenti_chiusi,
@@ -171,6 +175,50 @@ async def apri_piani_base_mancanti(*, limite: int = 100) -> EsitoPassata:
     return esito
 
 
+async def estrai_memorie(*, limite: int = 20, provider=None, embedder=None) -> EsitoPassata:
+    """Estrae le memorie dalle conversazioni ferme da abbastanza tempo.
+
+    Il codice che lo fa esisteva, con le sue prove, e **non lo chiamava
+    nessuno**: la memoria a lungo termine — il motivo per cui una personalità
+    si ricorda di chi le parla — in produzione non si sarebbe mai riempita.
+    Una conversazione ferma e mai estratta è il segnale giusto: estrarre a
+    ogni turno costerebbe una chiamata al modello per ogni risposta.
+
+    Il limite di memorie è quello del piano di ciascun utente, e vale solo
+    dove si fa pagare.
+    """
+    from ..memory.closing import ChiusuraConversazioni
+
+    esito = EsitoPassata()
+    if provider is None:
+        from ..api.deps import get_llm_provider
+        provider = get_llm_provider()
+    if embedder is None:
+        from ..api.deps import get_embedder
+        embedder = get_embedder()
+
+    async with get_session_factory()() as sessione:
+        gestore = GestoreAbbonamenti(sessione)
+        tariffe = await gestore.tariffe_in_vigore()
+
+        async def limite_di(user_id: int):
+            if not tariffe:
+                return None
+            return (await gestore.diritti_di(user_id)).limite("memorie")
+
+        chiusura = ChiusuraConversazioni(
+            sessione, provider, embedder, limite_per_utente=limite_di,
+        )
+        for risultato in await chiusura.chiudi_le_ferme(limite=limite):
+            if risultato.saltata:
+                continue
+            esito.conversazioni_chiuse += 1
+            esito.memorie_estratte += risultato.memorie
+        await sessione.commit()
+
+    return esito
+
+
 async def consolida_memorie(*, limite_utenti: int = 100) -> EsitoPassata:
     """Riordina le memorie di chi ne ha."""
     esito = EsitoPassata()
@@ -220,6 +268,16 @@ async def passata(
             totale.errori.append(f"piani base: {exc}")
 
         if memorie:
+            # Prima si estrae, poi si consolida: il consolidamento fonde e fa
+            # scadere, e deve lavorare anche su ciò che è appena arrivato.
+            try:
+                parziale = await estrai_memorie(limite=limite)
+                totale.conversazioni_chiuse = parziale.conversazioni_chiuse
+                totale.memorie_estratte = parziale.memorie_estratte
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("L'estrazione delle memorie è fallita")
+                totale.errori.append(f"estrazione: {exc}")
+
             try:
                 parziale = await consolida_memorie(limite_utenti=limite)
                 totale.utenti_consolidati = parziale.utenti_consolidati

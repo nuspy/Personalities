@@ -24,8 +24,9 @@ from pydantic import BaseModel, Field
 from ...auth.dependencies import CurrentUser, DbSession, require_role
 from ...domain.memory_models import Memory
 from ...knowledge.embedding import Embedder
+from ...billing.plans import GestoreAbbonamenti
 from ...memory.consolidation import Consolidatore
-from ...memory.store import MemoryStore
+from ...memory.store import MemoriaPiena, MemoryStore
 from ...observability.correlation import current_correlation_id
 from ..deps import get_embedder
 
@@ -116,14 +117,30 @@ async def aggiungi(
     Confidenza alta: l'ha scritta la persona a cui appartiene, e non è una
     deduzione di un modello.
     """
-    memoria = await MemoryStore(session, embedder).ricorda(
-        user_id=user.id,
-        content=payload.content,
-        kind=payload.kind,
-        importance=payload.importance,
-        confidence=1.0,
-        meta={"origine": "utente"},
+    gestore = GestoreAbbonamenti(session)
+    limite = (
+        (await gestore.diritti_di(user.id)).limite("memorie")
+        if await gestore.tariffe_in_vigore() else None
     )
+    try:
+        memoria = await MemoryStore(session, embedder).ricorda(
+            user_id=user.id,
+            content=payload.content,
+            kind=payload.kind,
+            importance=payload.importance,
+            confidence=1.0,
+            meta={"origine": "utente"},
+            limite=limite,
+        )
+    except MemoriaPiena as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Hai raggiunto il limite di {exc.limite} memorie del tuo "
+                f"piano, e le memorie presenti sono tutte più importanti di "
+                f"questa. Cancellane una per fare posto."
+            ),
+        ) from exc
     await session.commit()
     return _memoria_json(memoria)
 

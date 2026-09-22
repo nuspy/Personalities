@@ -24,8 +24,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import (
-    BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer,
-    String, Text, Uuid,
+    BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, Uuid,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -190,3 +189,63 @@ class CreditEntry(Base):
         # costerebbe una scansione del registro di quell'utente.
         Index("ix_credit_ledger_utente", "user_id", "created_at"),
     )
+
+
+class PaymentCheckout(Base, TimestampMixin):
+    """Una sessione di pagamento: l'utente è andato a pagare un piano.
+
+    L'abbonamento **non** nasce qui: nasce quando il fornitore conferma il
+    pagamento con un evento firmato. Attivarlo all'apertura del checkout
+    significherebbe dare il piano a chiunque apra la pagina e poi la chiuda.
+    """
+
+    __tablename__ = "payment_checkouts"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
+    )
+    plan_id: Mapped[int] = mapped_column(
+        ForeignKey("plans.id", ondelete="RESTRICT"), nullable=False,
+    )
+    annuale: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    #: `aperto` finché l'utente non paga o rinuncia; poi `pagato`,
+    #: `annullato` o `scaduto`. Uno stato finale non torna indietro.
+    status: Mapped[str] = mapped_column(String(20), default="aperto", nullable=False)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    #: La sessione presso il fornitore, e l'abbonamento che ne nasce.
+    external_id: Mapped[Optional[str]] = mapped_column(String(120))
+    subscription_external_id: Mapped[Optional[str]] = mapped_column(String(120))
+    #: Quanto è stato chiesto, in centesimi, fissato all'apertura: se il
+    #: prezzo del piano cambia mentre l'utente paga, vale quello che ha visto.
+    importo: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), default="EUR", nullable=False)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    plan: Mapped[Plan] = relationship(lazy="selectin")
+
+    __table_args__ = (
+        CheckConstraint(
+            "status in ('aperto', 'pagato', 'annullato', 'scaduto')",
+            name="ck_payment_checkouts_status",
+        ),
+        Index("ix_payment_checkouts_utente", "user_id", "created_at"),
+    )
+
+
+class PaymentEvent(Base):
+    """Un evento ricevuto dal fornitore di pagamento. Append-only.
+
+    La chiave è l'identificativo dell'evento presso il fornitore: i fornitori
+    rimandano lo stesso evento finché non ricevono un 200, e senza questa riga
+    un pagamento confermato due volte accrediterebbe due periodi.
+    """
+
+    __tablename__ = "payment_events"
+
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(60), nullable=False)
+    payload: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

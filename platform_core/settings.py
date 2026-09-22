@@ -72,6 +72,20 @@ class Settings(BaseSettings):
     #: risposta parlata, e li' conviene spegnerlo e rinunciare al labiale.
     tts_align_words: bool = True
 
+    # --- pagamenti ---------------------------------------------------------
+    #: Chi incassa. Oggi solo `mock`: il fornitore vero non e' ancora scelto,
+    #: e il flusso — sessione, pagina ospitata, evento firmato — e' lo stesso
+    #: per tutti. In produzione `mock` e' rifiutato all'avvio.
+    billing_provider: str = "mock"
+    #: Il segreto con cui il fornitore firma i suoi eventi.
+    billing_webhook_secret: str = "segreto-di-sviluppo-da-cambiare"
+    #: Fa fallire i rinnovi del simulatore, per provare la sospensione.
+    billing_mock_renewal_fails: bool = False
+    #: Gli indirizzi pubblici: dove sta l'API (per la pagina di pagamento
+    #: simulata) e dove torna l'utente dopo aver pagato.
+    api_public_url: str = "http://localhost:8100"
+    web_public_url: str = "http://localhost:3000"
+
     # --- osservabilita' ----------------------------------------------------
     otlp_endpoint: str = "http://localhost:4318"
     tracing_enabled: bool = True
@@ -145,6 +159,16 @@ class Settings(BaseSettings):
                 problems.append("CORS aperto a qualunque origine in produzione")
             if "localhost" in self.database_url:
                 problems.append("il database punta a localhost in produzione")
+            if self.billing_provider == "mock":
+                problems.append(
+                    "fornitore di pagamento simulato in produzione: chiunque "
+                    "potrebbe attivare qualunque piano senza pagare"
+                )
+            if self.billing_webhook_secret == "segreto-di-sviluppo-da-cambiare":
+                problems.append(
+                    "segreto dei webhook di pagamento lasciato al valore di "
+                    "sviluppo: chiunque potrebbe firmare un pagamento finto"
+                )
         return problems
 
 

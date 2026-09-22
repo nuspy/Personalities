@@ -42,6 +42,14 @@ GIORNI_SESSIONE = 30
 GIORNI_IMPEGNO = 180
 
 
+class MemoriaPiena(Exception):
+    """Il piano non consente altre memorie, e la nuova non conta abbastanza."""
+
+    def __init__(self, limite: int) -> None:
+        super().__init__(f"raggiunto il limite di {limite} memorie")
+        self.limite = limite
+
+
 class MemoryStore:
     def __init__(self, session: AsyncSession, embedder: Optional[Embedder] = None):
         self._session = session
@@ -135,8 +143,11 @@ class MemoryStore:
         source_message_id: Optional[uuid.UUID] = None,
         valid_from: Optional[datetime] = None,
         meta: Optional[Dict[str, Any]] = None,
+        limite: Optional[int] = None,
     ) -> Memory:
         adesso = utcnow()
+        if limite is not None:
+            await self._fai_spazio(user_id, limite, importance, adesso)
         memoria = Memory(
             user_id=user_id,
             personality_id=personality_id,
@@ -161,6 +172,41 @@ class MemoryStore:
         self._session.add(memoria)
         await self._session.flush()
         return memoria
+
+    async def _fai_spazio(
+        self, user_id: int, limite: int, importanza: float, adesso: datetime,
+    ) -> None:
+        """Al limite del piano, la memoria meno importante lascia il posto.
+
+        Solo se la nuova conta di più: altrimenti si rinuncia alla nuova. Il
+        contrario — rifiutare sempre oltre il limite — congelerebbe la memoria
+        di chi l'ha riempita il primo mese con dettagli, e le cose importanti
+        dette dopo non entrerebbero mai. La memoria che esce non si cancella:
+        si chiude con una data di fine e il motivo, come ogni fatto superato.
+        """
+        vive = (Memory.user_id == user_id) & Memory.valid_to.is_(None) & Memory.superseded_by.is_(None) & (
+            Memory.expires_at.is_(None) | (Memory.expires_at > adesso)
+        )
+        quante = int(await self._session.scalar(
+            select(func.count()).select_from(Memory).where(vive)
+        ) or 0)
+        if quante < limite:
+            return
+
+        meno = (await self._session.execute(
+            select(Memory).where(vive)
+            .order_by(Memory.importance.asc(), Memory.last_referenced_at.asc().nulls_first())
+            .limit(1)
+        )).scalar_one_or_none()
+
+        if meno is None or importanza <= (meno.importance or 0.0):
+            raise MemoriaPiena(limite)
+
+        meno.valid_to = adesso
+        meno.meta = {**(meno.meta or {}), "chiusa": "limite del piano"}
+        logger.info(
+            "Memoria %s chiusa per far posto (limite %d)", str(meno.id)[:8], limite,
+        )
 
     async def sostituisci(
         self, vecchia: Memory, nuova_contenuto: str, **campi: Any

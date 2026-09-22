@@ -92,7 +92,11 @@ class GestoreAbbonamenti:
         provider: Optional[BillingProvider] = None,
     ) -> None:
         self._session = session
-        self._provider = provider or ProviderDiSviluppo()
+        if provider is None:
+            from .pagamenti import provider_pagamenti
+
+            provider = provider_pagamenti()
+        self._provider = provider
         self._crediti = RegistroCrediti(session)
 
     # -- lettura -----------------------------------------------------------
@@ -186,8 +190,14 @@ class GestoreAbbonamenti:
         *,
         annuale: bool = False,
         in_prova: bool = False,
+        external_id: Optional[str] = None,
     ) -> Subscription:
-        """Apre un abbonamento e accredita i crediti del primo periodo."""
+        """Apre un abbonamento e accredita i crediti del primo periodo.
+
+        `external_id` arriva dal fornitore quando l'abbonamento nasce da un
+        pagamento confermato; senza, lo si chiede al fornitore — è il caso
+        del piano gratuito, che non passa da nessun pagamento.
+        """
         precedente = await self.abbonamento_di(user_id)
         if precedente is not None:
             # Chiuso e non cancellato: il passaggio da un piano all'altro
@@ -195,9 +205,10 @@ class GestoreAbbonamenti:
             precedente.status = "disdetto"
             precedente.cancel_at = utcnow()
 
-        external_id = await self._provider.crea_abbonamento(
-            user_id, piano, annuale=annuale,
-        )
+        if external_id is None:
+            external_id = await self._provider.crea_abbonamento(
+                user_id, piano, annuale=annuale,
+            )
 
         inizio = utcnow()
         durata = timedelta(days=365 if annuale else GIORNI_PERIODO)

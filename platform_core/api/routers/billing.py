@@ -22,13 +22,24 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import html
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from ...auth.dependencies import CurrentUser, DbSession, require_role
 from ...billing.credits import RegistroCrediti
+from ...billing.pagamenti import (
+    ANNULLATO, PAGATO, FirmaNonValida, GestorePagamenti, PagamentiSimulati,
+    provider_pagamenti,
+)
 from ...billing.plans import GestoreAbbonamenti
+from ...billing.quote import ContatoreQuote
+from ...domain.billing_models import PaymentCheckout
 from ...domain.models import User
+from ...settings import get_settings
 from ...domain.repositories import AuditRepository
 
 logger = logging.getLogger(__name__)
@@ -104,6 +115,11 @@ async def il_mio_conto(user: CurrentUser, session: DbSession) -> Dict[str, Any]:
         "abbonamento": _abbonamento_json(abbonamento),
         "diritti": diritti.to_dict(),
         "saldo": await RegistroCrediti(session).saldo(user.id),
+        # Quanto dei limiti è usato: mostrarlo prima evita che il limite si
+        # scopra come un rifiuto. `limite` nullo significa illimitato, e senza
+        # catalogo attivo l'installazione non limita affatto.
+        "uso": (await ContatoreQuote(session).uso(user.id)).to_dict(diritti),
+        "limiti_attivi": await gestore.tariffe_in_vigore(),
     }
 
 
@@ -139,6 +155,19 @@ async def sottoscrivi(
             detail=f"Il piano «{payload.piano}» non esiste o non è più offerto.",
         )
 
+    prezzo = piano.price_yearly if payload.annuale else piano.price_monthly
+    if prezzo > 0:
+        # Il varco che c'era: questo endpoint attivava qualunque piano, anche
+        # il più caro, senza passare da nessun pagamento. Un piano che costa
+        # qualcosa nasce solo dall'evento firmato del fornitore.
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=(
+                f"Il piano «{piano.slug}» è a pagamento: si attiva passando dal "
+                f"pagamento (POST /me/checkout)."
+            ),
+        )
+
     abbonamento = await gestore.sottoscrivi(
         user.id, piano, annuale=payload.annuale,
     )
@@ -149,6 +178,180 @@ async def sottoscrivi(
         "abbonamento": _abbonamento_json(abbonamento),
         "saldo": await RegistroCrediti(session).saldo(user.id),
     }
+
+
+@router.post("/me/checkout", status_code=status.HTTP_201_CREATED)
+async def apri_checkout(
+    payload: Sottoscrizione, user: CurrentUser, session: DbSession,
+) -> Dict[str, Any]:
+    """Apre una sessione di pagamento e dice dove andare a pagare.
+
+    L'abbonamento non nasce qui: nasce quando il fornitore conferma il
+    pagamento. Chi apre la pagina e poi la chiude non ha comprato niente.
+    """
+    gestore = GestoreAbbonamenti(session)
+    piano = await gestore.piano_per_slug(payload.piano)
+    if piano is None or not piano.active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Il piano «{payload.piano}» non esiste o non è più offerto.",
+        )
+    if (piano.price_yearly if payload.annuale else piano.price_monthly) <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Il piano «{piano.slug}» è gratuito: non serve pagare.",
+        )
+
+    ritorno = f"{get_settings().web_public_url.rstrip('/')}/piano"
+    checkout, url = await GestorePagamenti(session).apri(
+        user.id, piano, annuale=payload.annuale, ritorno=ritorno,
+    )
+    await session.commit()
+    return {"checkout_id": str(checkout.id), "url": url, "importo": checkout.importo, "valuta": checkout.currency}
+
+
+@router.get("/me/checkout/{checkout_id}")
+async def stato_checkout(
+    checkout_id: uuid.UUID, user: CurrentUser, session: DbSession,
+) -> Dict[str, Any]:
+    """Com'è andata: la pagina di ritorno lo chiede invece di fidarsi dell'URL.
+
+    L'indirizzo di ritorno lo può scrivere chiunque; lo stato della sessione
+    no — è cambiato solo dall'evento firmato del fornitore.
+    """
+    checkout = await session.get(PaymentCheckout, checkout_id)
+    if checkout is None or checkout.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Pagamento non trovato")
+    return {"checkout_id": str(checkout.id), "stato": checkout.status, "piano": checkout.plan.slug}
+
+
+@router.post("/billing/webhook")
+async def webhook(request: Request, session: DbSession) -> Dict[str, Any]:
+    """Gli eventi del fornitore di pagamento.
+
+    Senza autenticazione dell'utente — chi chiama è il fornitore — e per
+    questo con la firma verificata prima di leggere qualunque cosa. Risponde
+    200 anche a un evento già applicato: il fornitore rimanda finché non lo
+    riceve, e un errore qui lo farebbe rimandare per sempre.
+    """
+    corpo = await request.body()
+    gestore = GestorePagamenti(session)
+    try:
+        evento = gestore.provider.verifica(corpo, request.headers)
+    except FirmaNonValida as exc:
+        logger.warning("Evento di pagamento rifiutato: %s", exc)
+        raise HTTPException(status_code=400, detail=f"evento non valido: {exc}") from exc
+
+    esito = await gestore.applica(evento)
+    await session.commit()
+    logger.info("Evento %s (%s): %s", evento.id, evento.tipo, esito)
+    return {"ricevuto": evento.id, "esito": esito}
+
+
+# ---- la pagina di pagamento del simulatore ---------------------------------
+
+
+def _simulatore() -> PagamentiSimulati:
+    provider = provider_pagamenti()
+    if not isinstance(provider, PagamentiSimulati):
+        raise HTTPException(status_code=404, detail="Non disponibile")
+    return provider
+
+
+@router.get("/billing/mock/checkout/{checkout_id}", response_class=HTMLResponse)
+async def pagina_simulata(
+    checkout_id: uuid.UUID, session: DbSession, ritorno: str = "",
+) -> HTMLResponse:
+    """La pagina che un fornitore vero ospiterebbe. Esiste solo col simulatore."""
+    _simulatore()
+    checkout = await session.get(PaymentCheckout, checkout_id)
+    if checkout is None:
+        raise HTTPException(status_code=404, detail="Pagamento non trovato")
+
+    importo = f"{checkout.importo / 100:.2f} {checkout.currency}"
+    periodo = "anno" if checkout.annuale else "mese"
+    chiuso = checkout.status != "aperto"
+    return HTMLResponse(_PAGINA.format(
+        piano=html.escape(checkout.plan.name),
+        importo=html.escape(importo),
+        periodo=periodo,
+        azione=f"/billing/mock/checkout/{checkout.id}/esito",
+        ritorno=html.escape(ritorno, quote=True),
+        stato=html.escape(checkout.status),
+        disabilitato="disabled" if chiuso else "",
+    ))
+
+
+@router.post("/billing/mock/checkout/{checkout_id}/esito")
+async def esito_simulato(
+    checkout_id: uuid.UUID, request: Request, session: DbSession,
+) -> RedirectResponse:
+    """Il clic su «Paga» o «Annulla».
+
+    Non attiva niente da sé: costruisce l'evento che il fornitore
+    manderebbe, lo firma e lo fa passare dalla stessa verifica e dallo stesso
+    gestore di un evento vero. È questo che rende il simulatore una prova del
+    percorso di produzione invece di una scorciatoia.
+    """
+    simulatore = _simulatore()
+    modulo = await request.form()
+    scelta = str(modulo.get("esito", ""))
+    ritorno = str(modulo.get("ritorno", "")) or get_settings().web_public_url
+
+    checkout = await session.get(PaymentCheckout, checkout_id)
+    if checkout is None:
+        raise HTTPException(status_code=404, detail="Pagamento non trovato")
+
+    tipo = PAGATO if scelta == "paga" else ANNULLATO
+    corpo = simulatore.evento(tipo, {
+        "checkout_id": str(checkout.id),
+        "subscription_id": f"mock_sub_{checkout.id.hex[:16]}",
+        "importo": checkout.importo,
+    })
+    gestore = GestorePagamenti(session, simulatore)
+    evento = simulatore.verifica(corpo, {"X-Mock-Signature": simulatore.firma(corpo)})
+    await gestore.applica(evento)
+    await session.commit()
+
+    separatore = "&" if "?" in ritorno else "?"
+    return RedirectResponse(
+        f"{ritorno}{separatore}checkout={checkout.id}", status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+_PAGINA = """<!doctype html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pagamento simulato</title>
+<style>
+  body {{ font: 16px/1.5 system-ui, sans-serif; background: #eceef1; color: #16212e;
+         margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; }}
+  main {{ background: #fff; border-top: 4px solid #a02c16; max-width: 420px; width: 100%;
+          padding: 28px; box-sizing: border-box; }}
+  .avviso {{ font-size: 13px; color: #8f2617; background: #fbf1ee; padding: 8px 10px; margin: 0 0 20px; }}
+  h1 {{ font: 400 28px Georgia, serif; margin: 0 0 4px; }}
+  .importo {{ font: 400 36px Georgia, serif; margin: 16px 0 24px; }}
+  form {{ display: flex; gap: 10px; flex-wrap: wrap; }}
+  button {{ min-height: 48px; padding: 0 18px; font-size: 15px; border: 1px solid #16212e;
+            background: #16212e; color: #fff; cursor: pointer; flex: 1; }}
+  button.annulla {{ background: transparent; color: #4a5866; border-color: #d3d8de; }}
+  button:disabled {{ opacity: .45; cursor: not-allowed; }}
+  button:focus-visible {{ outline: 3px solid #c4624d; outline-offset: 2px; }}
+</style></head>
+<body><main>
+  <p class="avviso">Pagamento simulato: nessuna carta viene addebitata. In produzione questa
+  pagina è ospitata dal fornitore di pagamento.</p>
+  <h1>{piano}</h1>
+  <div>per un {periodo}</div>
+  <div class="importo">{importo}</div>
+  <form method="post" action="{azione}">
+    <input type="hidden" name="ritorno" value="{ritorno}">
+    <button name="esito" value="paga" {disabilitato}>Paga</button>
+    <button name="esito" value="annulla" class="annulla" {disabilitato}>Annulla</button>
+  </form>
+  <p style="font-size:13px;color:#5f6b76;margin-top:16px">Stato: {stato}</p>
+</main></body></html>"""
+
 
 
 @router.post("/me/subscription/cancel")
