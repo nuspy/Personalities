@@ -22,11 +22,11 @@ COPY platform_core ./platform_core
 RUN useradd --create-home --uid 1000 persona && chown -R persona:persona /app
 USER persona
 
-EXPOSE 8000
+EXPOSE 8100
 
 # La liveness non tocca i supporti: un database lento non deve far riavviare
 # un'applicazione sana.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/healthz', timeout=3)"
 
-CMD ["uvicorn", "platform_core.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "platform_core.api.app:app", "--host", "0.0.0.0", "--port", "8100"]

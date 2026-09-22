@@ -91,7 +91,7 @@ services:
     # `python -m` e non `uvicorn` direttamente: il punto d'ingresso sceglie
     # l'event loop adatto alla piattaforma (su Windows psycopg non funziona con
     # quello predefinito). In Linux il risultato è identico.
-    command: python -m platform_core.api --host 0.0.0.0 --port 8000 --reload
+    command: python -m platform_core.api --host 0.0.0.0 --port 8100 --reload
     environment:
       PERSONA_ROLE: api
       PERSONA_ENVIRONMENT: dev
@@ -100,7 +100,7 @@ services:
       PERSONA_KEYCLOAK_URL: http://keycloak:8080
       PERSONA_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
-      - "8000:8000"
+      - "8100:8100"
     volumes:
       - ./platform_core:/app/platform_core
     depends_on:

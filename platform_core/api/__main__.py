@@ -1,6 +1,6 @@
 """Avvio del servizio API.
 
-    python -m platform_core.api --port 8000
+    python -m platform_core.api            # porta 8100
 
 Esiste per una ragione sola, ed è Windows. uvicorn sceglie da sé come costruire
 l'event loop e su Windows costruisce un `ProactorEventLoop`, che psycopg 3 non
@@ -40,7 +40,11 @@ def loop_factory() -> Optional[Callable[[], asyncio.AbstractEventLoop]]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="platform_core.api")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8000)
+    # 8100 e non 8000: sulla macchina di sviluppo la 8000 è già usata da
+    # altri progetti, e un avvio che ci si sovrappone fallisce — o peggio,
+    # riesce su un'interfaccia diversa e i client parlano col servizio
+    # sbagliato senza accorgersene.
+    parser.add_argument("--port", type=int, default=8100)
     parser.add_argument("--reload", action="store_true")
     args = parser.parse_args(argv)
 

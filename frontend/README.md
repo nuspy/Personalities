@@ -14,7 +14,7 @@ Serve il backend in ascolto e Keycloak avviato:
 
 ```bash
 docker compose up -d postgres redis keycloak     # dalla radice del progetto
-python -m platform_core.api --port 8000
+python -m platform_core.api --port 8100
 ```
 
 La configurazione sta in `.env.local` (copia `.env.example`). I valori sono
