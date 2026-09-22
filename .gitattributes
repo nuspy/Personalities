@@ -1,0 +1,3 @@
+# Gli script di shell restano con fine riga LF anche su Windows: bash legge un
+# CR come parte del comando, e uno script convertito smette di funzionare.
+*.sh text eol=lf
