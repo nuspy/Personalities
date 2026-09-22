@@ -139,6 +139,25 @@ non rifiuta nulla — può essere assegnato a qualunque compito, comprese le
 risposte agli utenti: decide l'amministratore. La console lo dichiara accanto
 al nome, e il registro di audit conserva chi ha scelto cosa.
 
+## Recupero assistito
+
+Il compito *recupero* non serve a ogni risposta: si accende per personalità,
+con due caselle nella scheda della voce, e ciascuna costa una chiamata.
+
+**Riscrivere la domanda** prima di cercare. In una conversazione le domande si
+appoggiano a quelle di prima — «e lui cosa ne pensava?» — e cercare quelle
+parole nel corpus non trova niente, perché il soggetto sta tre turni indietro.
+È il caso in cui il recupero fallisce in silenzio: nessun errore, solo passaggi
+che non c'entrano e una risposta vaga che sembra colpa del modello.
+
+**Tenere solo i passaggi pertinenti** fra quelli recuperati. Il recupero ne
+porta sei perché sei è un numero ragionevole, non perché sei siano pertinenti.
+
+I testi dei passaggi non vengono mai riscritti: sono ciò che l'utente vede
+nelle citazioni e ciò contro cui il giudice verifica le affermazioni. Si sceglie
+quali entrano, e ciò che viene scartato resta leggibile nell'osservabilità del
+recupero — «trovato e poi scartato» è una diagnosi diversa da «non trovato».
+
 ## Ricerca online
 
 Un corpus è chiuso per costruzione, ed è la sua virtù: si sa cosa c'è dentro.

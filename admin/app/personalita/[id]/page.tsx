@@ -205,6 +205,18 @@ function ModuloVersione({
     max_risultati?: number;
   };
   const [cerca, setCerca] = useState(Boolean(ricercaIniziale.attiva));
+
+  /* Il recupero assistito: una chiamata in più a un modello a parte, quello
+     del compito «recupero». Spento di default perché una voce che conversa e
+     basta pagherebbe latenza per nulla. */
+  const assistenzaIniziale = (iniziale?.rag_config?.recupero_assistito ??
+    {}) as { riscrivi_domanda?: boolean; seleziona_passaggi?: boolean };
+  const [riscrivi, setRiscrivi] = useState(
+    Boolean(assistenzaIniziale.riscrivi_domanda),
+  );
+  const [seleziona, setSeleziona] = useState(
+    Boolean(assistenzaIniziale.seleziona_passaggi),
+  );
   const [siti, setSiti] = useState((ricercaIniziale.siti ?? []).join(NUOVA_RIGA));
   const [modoSiti, setModoSiti] = useState(
     ricercaIniziale.modo === "solo" ? "solo" : "anche",
@@ -277,6 +289,44 @@ function ModuloVersione({
           />
         </div>
       </div>
+
+      <fieldset className={propri.gruppo}>
+        <legend className={propri.gruppoTitolo}>Recupero assistito</legend>
+        <p className={stili.campoAiuto}>
+          Un modello a parte — quello del compito <em>recupero</em> — aiuta le
+          due fasi in cui il recupero fallisce in silenzio. Costa una chiamata
+          per ciascuna casella: conviene a una voce che risponde di fatti su un
+          corpus grande, non a una che conversa.
+        </p>
+
+        <div className={propri.caselle}>
+          <label className={propri.casella}>
+            <input
+              type="checkbox"
+              checked={riscrivi}
+              onChange={(e) => setRiscrivi(e.target.checked)}
+            />
+            Riscrivi la domanda prima di cercare
+          </label>
+          <label className={propri.casella}>
+            <input
+              type="checkbox"
+              checked={seleziona}
+              onChange={(e) => setSeleziona(e.target.checked)}
+            />
+            Tieni solo i passaggi pertinenti
+          </label>
+        </div>
+
+        <p className={stili.campoAiuto}>
+          La prima rimette nella domanda ciò che i turni precedenti davano per
+          sottinteso: «e lui cosa ne pensava?» non contiene il soggetto, e
+          cercare quelle parole nel corpus non trova niente. La seconda scarta
+          i passaggi che non c&apos;entrano — i testi non vengono mai riscritti,
+          e ciò che viene scartato resta visibile nell&apos;osservabilità del
+          recupero.
+        </p>
+      </fieldset>
 
       <fieldset className={propri.gruppo}>
         <legend className={propri.gruppoTitolo}>Ricerca online</legend>
@@ -383,6 +433,10 @@ function ModuloVersione({
               system_prompt: prompt.trim(),
               rag_config: {
                 max_chunks: Number(passaggi) || 6,
+                recupero_assistito: {
+                  riscrivi_domanda: riscrivi,
+                  seleziona_passaggi: seleziona,
+                },
                 ricerca_online: {
                   attiva: cerca,
                   siti: listaSiti,

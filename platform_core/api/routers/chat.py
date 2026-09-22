@@ -59,6 +59,7 @@ from ...observability.correlation import current_correlation_id
 from ...runtime.menzioni import menzioni_json
 from ...runtime.menzioni import risolvi as risolvi_menzioni
 from ...runtime.persona_engine import PersonaEngine, riferimenti_citati
+from ...runtime.recupero_assistito import RecuperoAssistito
 
 logger = logging.getLogger(__name__)
 
@@ -332,6 +333,9 @@ async def chat(
     motore = PersonaEngine(
         provider,
         retriever=Retriever(session, embedder) if kb_ids or menzioni else None,
+        # Riscrive la domanda e sceglie i passaggi, dove la voce lo chiede:
+        # un modello a parte, di norma più economico di quello che risponde.
+        assistente=RecuperoAssistito(provider_per(Compito.RECUPERO)),
     )
 
     # Le memorie entrano nello strato 1, sotto il punto di cache: cambiano a

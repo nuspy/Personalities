@@ -28,6 +28,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
 from ..domain.knowledge_models import PersonalityVersion
 from ..knowledge.retriever import EsitoRecupero, Retriever
 from ..knowledge.ricerca_web import ConfigurazioneRicerca, RicercaWeb
+from .recupero_assistito import ConfigurazioneRecupero, RecuperoAssistito
 from ..llm.base import CacheHint, GenerationRequest, LLMProvider, Message, StreamChunk, Usage
 from ..settings import get_settings
 from ..observability.tracing import traccia
@@ -72,6 +73,11 @@ class EsitoTurno:
     tempi_ms: Dict[str, int] = field(default_factory=dict)
     #: I nomi delle voci chiamate in causa che hanno portato passaggi.
     menzioni: List[str] = field(default_factory=list)
+    #: Cosa ha fatto il recupero assistito: la domanda con cui si è davvero
+    #: cercato, quanti passaggi sono stati tenuti, o perché non si è fatto
+    #: nulla. Senza, una ricerca che non trova niente sembra colpa del corpus
+    #: mentre è la domanda a essere stata riscritta male.
+    recupero_assistito: Dict[str, Any] = field(default_factory=dict)
     #: Cosa ha fatto la ricerca online: quanti passaggi ha portato, da quali
     #: domini, o perché non ne ha portati. Vuoto quando non era accesa.
     #: Sta nella traccia perché quando una risposta manca di un fatto recente
@@ -106,6 +112,10 @@ class EsitoTurno:
                 "motivo": self.motivo_degrado,
             },
             **({"ricerca": self.ricerca} if self.ricerca else {}),
+            **(
+                {"recupero_assistito": self.recupero_assistito}
+                if self.recupero_assistito else {}
+            ),
         }
 
 
@@ -150,6 +160,7 @@ class PersonaEngine:
         builder: Optional[ContextBuilder] = None,
         strategia: Optional[ContextStrategy] = None,
         ricerca: Optional["RicercaWeb"] = None,
+        assistente: Optional[RecuperoAssistito] = None,
     ) -> None:
         self._provider = provider
         self._retriever = retriever
@@ -157,6 +168,10 @@ class PersonaEngine:
         #: perché altrimenti il ramo sarebbe verificabile solo con una rete e
         #: un servizio veri.
         self._ricerca = ricerca
+        #: Chi riscrive la domanda e sceglie i passaggi, quando la voce lo
+        #: chiede. Usa il modello del compito «recupero», che di norma non è
+        #: quello che risponde.
+        self._assistente = assistente
         self._builder = builder or ContextBuilder()
         #: Come il prefisso stabile viene fatto riconoscere al motore. Scelta
         #: dal fornitore se non indicata: è lui a sapere se dietro c'è una
@@ -197,11 +212,28 @@ class PersonaEngine:
 
         rag_config = versione.rag_config or {}
         limite = int(rag_config.get("max_chunks", 6))
+        assistenza = ConfigurazioneRecupero.da_rag(rag_config)
+
+        # La domanda con cui si cerca può non essere quella scritta: in una
+        # conversazione «e lui cosa ne pensava?» non contiene il soggetto, e
+        # cercare quelle parole nel corpus non trova niente.
+        da_cercare = domanda
+        if assistenza.riscrivi_domanda and self._assistente is not None:
+            inizio_riscrittura = time.perf_counter()
+            da_cercare, motivo = await self._assistente.domanda_per_recupero(
+                domanda, storico=storico,
+            )
+            esito.tempi_ms["riscrittura"] = int(
+                (time.perf_counter() - inizio_riscrittura) * 1000
+            )
+            esito.recupero_assistito["domanda_cercata"] = da_cercare
+            if motivo:
+                esito.recupero_assistito["riscrittura"] = motivo
 
         inizio = time.perf_counter()
         if self._retriever is not None and kb_ids and esito.modo == "rag":
             esito.recupero = await self._retriever.cerca(
-                domanda, kb_ids, limite=limite,
+                da_cercare, kb_ids, limite=limite,
             )
 
         # Le voci chiamate in causa: pochi passaggi ciascuna, numerati dopo
@@ -213,7 +245,7 @@ class PersonaEngine:
                 if not menzione.kb_ids:
                     continue
                 trovati = await self._retriever.cerca(
-                    domanda, menzione.kb_ids, limite=PASSAGGI_PER_MENZIONE,
+                    da_cercare, menzione.kb_ids, limite=PASSAGGI_PER_MENZIONE,
                 )
                 if not trovati.scelti:
                     continue
@@ -232,7 +264,35 @@ class PersonaEngine:
         # nessuno ha scelto di mettere nella voce, e l'ordine nel prompt è già
         # un giudizio su quanto pesi.
         if esito.modo == "rag":
-            await self._cerca_online(esito, versione, domanda)
+            await self._cerca_online(esito, versione, da_cercare)
+
+        # La scelta viene per ultima, sul mucchio intero — corpus, voci
+        # chiamate in causa e web insieme: scegliere prima del web
+        # significherebbe giudicare metà del materiale.
+        if (
+            assistenza.seleziona_passaggi
+            and self._assistente is not None
+            and esito.recupero is not None
+        ):
+            inizio_scelta = time.perf_counter()
+            tenuti, scartati, motivo = await self._assistente.scegli_passaggi(
+                da_cercare, esito.recupero.scelti,
+            )
+            esito.tempi_ms["selezione"] = int(
+                (time.perf_counter() - inizio_scelta) * 1000
+            )
+            esito.recupero.scelti = tenuti
+            # Gli scartati restano leggibili: quando una risposta manca di un
+            # fatto che il corpus contiene, «trovato e poi scartato» è una
+            # risposta diversa da «non trovato», e senza questo non si
+            # distinguono.
+            esito.recupero.scartati.extend(scartati)
+            esito.recupero_assistito["tenuti"] = [p.etichetta for p in tenuti]
+            esito.recupero_assistito["scartati_dalla_scelta"] = [
+                p.etichetta for p in scartati
+            ]
+            if motivo:
+                esito.recupero_assistito["selezione"] = motivo
 
         volatile = (
             strato_volatile_da_recupero(
