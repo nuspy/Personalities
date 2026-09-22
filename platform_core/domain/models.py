@@ -111,6 +111,14 @@ class Conversation(Base, TimestampMixin, OwnedMixin):
     title: Mapped[Optional[str]] = mapped_column(String(300))
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
     last_message_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    #: Quando le memorie sono state estratte l'ultima volta. Un segno sulla
+    #: conversazione e non la presenza di memorie che vi rimandano: una
+    #: conversazione breve, o da cui non si ricava nulla, non lascia memorie,
+    #: e verrebbe ripresa a ogni passata — fino a occupare tutti i posti della
+    #: passata e fermare l'estrazione per chiunque altro. E se chi scrive torna
+    #: dopo l'estrazione, `last_message_at` supera il segno e la conversazione
+    #: torna fra quelle da estrarre, invece di restare ferma alla prima volta.
+    memories_extracted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     owner: Mapped[Optional[User]] = relationship(back_populates="conversations")
     messages: Mapped[List["Message"]] = relationship(

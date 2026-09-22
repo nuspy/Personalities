@@ -301,3 +301,83 @@ class TestEstrazioneNellaPassata:
         seconda = await estrai_memorie(provider=modello, embedder=None)
 
         assert seconda.conversazioni_chiuse == 0
+
+    async def test_un_archiviata_si_estrae_senza_aspettare_il_silenzio(
+        self, session, session_factory, monkeypatch, utente,
+    ):
+        """Archiviare è chi scrive che dice di aver finito: la pagina delle
+        conversazioni lo promette, e prima l'estrazione guardava solo le
+        attive — un'archiviata non avrebbe lasciato memorie."""
+        from platform_core.jobs.periodico import estrai_memorie
+
+        monkeypatch.setattr("platform_core.jobs.periodico.get_session_factory", lambda: session_factory)
+        c = await _conversazione(session, utente, stato="archived")
+        c.last_message_at = utcnow()
+        for ruolo, testo in [
+            ("user", "Sono un medico e lavoro a Budapest da dieci anni, in ospedale."),
+            ("assistant", "Un mestiere che chiede misura."),
+        ]:
+            session.add(Message(conversation_id=c.id, role=ruolo, content=testo, created_at=utcnow()))
+        await session.commit()
+
+        esito = await estrai_memorie(provider=ModelloEstrattore(), embedder=None)
+
+        assert esito.conversazioni_chiuse == 1
+
+    async def test_le_brevi_non_occupano_la_passata_per_sempre(
+        self, session, session_factory, monkeypatch, utente,
+    ):
+        """Una conversazione da cui non si ricava nulla non lascia memorie:
+        con il vecchio criterio veniva ripresa a ogni passata, e venti così
+        bastavano a fermare l'estrazione per tutti."""
+        from platform_core.jobs.periodico import estrai_memorie
+
+        monkeypatch.setattr("platform_core.jobs.periodico.get_session_factory", lambda: session_factory)
+        breve = await _conversazione(session, utente, messaggi=1)
+        breve.last_message_at = utcnow() - timedelta(hours=3)
+        await session.commit()
+
+        await estrai_memorie(limite=1, provider=ModelloEstrattore(), embedder=None)
+
+        piena = await _conversazione(session, utente)
+        piena.last_message_at = utcnow() - timedelta(hours=2)
+        for ruolo, testo in [
+            ("user", "Sono un medico e lavoro a Budapest da dieci anni, in ospedale."),
+            ("assistant", "Un mestiere che chiede misura."),
+        ]:
+            session.add(Message(conversation_id=piena.id, role=ruolo, content=testo, created_at=utcnow()))
+        await session.commit()
+
+        # Un solo posto per passata: se la breve lo riprendesse, la piena
+        # non verrebbe mai estratta.
+        seconda = await estrai_memorie(limite=1, provider=ModelloEstrattore(), embedder=None)
+
+        assert seconda.conversazioni_chiuse == 1
+
+    async def test_chi_torna_dopo_l_estrazione_viene_riletto(
+        self, session, session_factory, monkeypatch, utente,
+    ):
+        from platform_core.jobs.periodico import estrai_memorie
+
+        monkeypatch.setattr("platform_core.jobs.periodico.get_session_factory", lambda: session_factory)
+        c = await _conversazione(session, utente)
+        c.last_message_at = utcnow() - timedelta(hours=5)
+        for ruolo, testo in [
+            ("user", "Sono un medico e lavoro a Budapest da dieci anni, in ospedale."),
+            ("assistant", "Un mestiere che chiede misura."),
+        ]:
+            session.add(Message(conversation_id=c.id, role=ruolo, content=testo, created_at=utcnow()))
+        await session.commit()
+        modello = ModelloEstrattore()
+        await estrai_memorie(provider=modello, embedder=None)
+
+        # L'estrazione di ore fa, poi di nuovo messaggi e di nuovo silenzio.
+        await session.refresh(c)
+        assert c.memories_extracted_at is not None
+        c.memories_extracted_at = utcnow() - timedelta(hours=4)
+        c.last_message_at = utcnow() - timedelta(hours=1)
+        await session.commit()
+
+        seconda = await estrai_memorie(provider=modello, embedder=None)
+
+        assert seconda.conversazioni_chiuse == 1

@@ -1,0 +1,43 @@
+/* Il microfono accanto al campo: stessa misura dei pulsanti vicini. */
+
+.detta,
+.attivo {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--filo);
+  background: transparent;
+  color: var(--inchiostro-tenue);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.detta:not(:disabled):hover {
+  border-color: var(--inchiostro-debole);
+  color: var(--inchiostro);
+}
+
+.detta:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Mentre ascolta si vede, e non solo dal colore: l'icona si riempie e un
+ * anello pulsa — chi non distingue il rosso sa comunque che il microfono è
+ * aperto. Il movimento si spegne con `prefers-reduced-motion` (globals.css). */
+.attivo {
+  border-color: var(--rubrica);
+  color: var(--rubrica);
+  animation: respiro 1.6s ease-in-out infinite;
+}
+
+@keyframes respiro {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--rubrica) 35%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--rubrica) 0%, transparent);
+  }
+}

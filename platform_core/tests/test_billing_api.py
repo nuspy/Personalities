@@ -166,6 +166,26 @@ class TestCatalogoEConto:
         assert abbonamento["disdetto_il"] is not None
         assert abbonamento["stato"] in ("attivo", "in_prova")
 
+    async def test_dal_pagato_al_gratuito_si_passa_a_fine_periodo(
+        self, client, piani, utente, session,
+    ):
+        """Il periodo è già stato pagato: scegliere il gratuito disdice il
+        piano pagato a scadenza, invece di toglierlo subito."""
+        gold = await abbona(session, utente, "gold")
+        await session.commit()
+
+        risposta = await client.post("/me/subscription", json={"piano": "free"})
+
+        assert risposta.status_code == 202
+        corpo = risposta.json()
+        assert corpo["abbonamento"]["piano"] == "gold"
+        assert corpo["abbonamento"]["disdetto_il"] == corpo["passaggio"]["dal"]
+        assert corpo["passaggio"]["piano"] == "free"
+        await session.refresh(gold)
+        assert gold.status == "attivo"
+        attuale = await GestoreAbbonamenti(session).abbonamento_di(utente.id)
+        assert attuale.id == gold.id
+
     async def test_i_movimenti_accompagnano_il_saldo(
         self, client, piani, utente, session,
     ):

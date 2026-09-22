@@ -179,3 +179,16 @@ a {
     scroll-behavior: auto !important;
   }
 }
+
+/* Per chi legge con lo screen reader: l'etichetta c'è, l'occhio non la vede. */
+.solo-lettori {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

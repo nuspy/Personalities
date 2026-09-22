@@ -139,6 +139,52 @@ class TestFlusso:
         assert risposta.status_code == 400
 
 
+class TestCambioDiPiano:
+    async def test_il_piano_lasciato_viene_disdetto_anche_dal_fornitore(
+        self, piani, session, utente,  # noqa: F811
+    ):
+        """Chiuderlo solo da noi lasciava il fornitore libero di rinnovarlo:
+        chi passava da un piano all'altro li avrebbe pagati entrambi."""
+        disdetti: list = []
+
+        class Fornitore(PagamentiSimulati):
+            async def disdici(self, external_id: str) -> None:
+                disdetti.append(external_id)
+
+        fornitore = Fornitore(Settings())
+        gestore = GestoreAbbonamenti(session, fornitore)
+        vecchio = await gestore.sottoscrivi(
+            utente.id, await gestore.piano_per_slug("gold"), external_id="sub_vecchio",
+        )
+        await gestore.sottoscrivi(
+            utente.id, await gestore.piano_per_slug("gold"), annuale=True,
+            external_id="sub_nuovo",
+        )
+
+        assert disdetti == ["sub_vecchio"]
+        assert vecchio.status == "disdetto"
+
+    async def test_un_piano_gia_disdetto_non_si_disdice_due_volte(
+        self, piani, session, utente,  # noqa: F811
+    ):
+        disdetti: list = []
+
+        class Fornitore(PagamentiSimulati):
+            async def disdici(self, external_id: str) -> None:
+                disdetti.append(external_id)
+
+        gestore = GestoreAbbonamenti(session, Fornitore(Settings()))
+        vecchio = await gestore.sottoscrivi(
+            utente.id, await gestore.piano_per_slug("gold"), external_id="sub_vecchio",
+        )
+        await gestore.disdici(vecchio)
+        await gestore.sottoscrivi(
+            utente.id, await gestore.piano_per_slug("free"), external_id="sub_free",
+        )
+
+        assert disdetti == ["sub_vecchio"]
+
+
 class TestWebhook:
     async def test_lo_stesso_evento_due_volte_accredita_una_volta(
         self, client, piani, session, utente,  # noqa: F811

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "react-oidc-context";
 import {
   conversa,
@@ -8,6 +9,7 @@ import {
   ErroreApi,
   leggiCapacita,
   leggiConto,
+  leggiMessaggi,
   type CapacitaPiattaforma,
   type Conto,
   type Consumo,
@@ -16,6 +18,8 @@ import {
   type Verifica,
 } from "@/lib/api";
 import stili from "./page.module.css";
+import { Dettatura } from "./dettatura";
+import { LinkSezioni } from "./navigazione";
 import {
   BottoneAscolto,
   Ritratto,
@@ -36,10 +40,29 @@ interface Turno {
 }
 
 function adesso(): string {
-  return new Date().toLocaleTimeString("it-IT", {
+  return oraDi(new Date());
+}
+
+function oraDi(quando: Date): string {
+  return quando.toLocaleTimeString("it-IT", {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/* La conversazione in corso sta nell'indirizzo: un aggiornamento della pagina
+ * la riapre invece di perderla, e il collegamento dalla pagina delle
+ * conversazioni è lo stesso indirizzo. `replaceState` e non una navigazione:
+ * Next lo sincronizza con il router senza rimontare la pagina, che perderebbe
+ * la risposta mentre arriva. */
+function ricordaNellIndirizzo(conversazione: string | null, personalita: string | null) {
+  if (!conversazione) {
+    window.history.replaceState(null, "", "/");
+    return;
+  }
+  const parametri = new URLSearchParams({ conversazione });
+  if (personalita) parametri.set("personalita", personalita);
+  window.history.replaceState(null, "", `/?${parametri}`);
 }
 
 export default function Pagina() {
@@ -49,7 +72,13 @@ export default function Pagina() {
   if (auth.error) return <Accesso errore={auth.error.message} />;
   if (!auth.isAuthenticated) return <Accesso />;
 
-  return <Conversazione />;
+  /* `useSearchParams` chiede un confine di sospensione: senza, Next non
+   * potrebbe generare in anticipo il resto della pagina. */
+  return (
+    <Suspense fallback={<Attesa />}>
+      <Conversazione />
+    </Suspense>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -188,13 +217,23 @@ function StatoInstallazione({ capacita }: { capacita: CapacitaPiattaforma }) {
 
 function Conversazione() {
   const auth = useAuth();
+  const parametri = useSearchParams();
   const [turni, setTurni] = useState<Turno[]>([]);
   const [bozza, setBozza] = useState("");
   const [inCorso, setInCorso] = useState(false);
   const [pensa, setPensa] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  /* Letti una volta, all'apertura: dopo, lo stato è la fonte e l'indirizzo
+   * lo segue. */
+  const [conversationId, setConversationId] = useState<string | null>(
+    () => parametri.get("conversazione"),
+  );
   const [personalita, setPersonalita] = useState<Personalita[]>([]);
-  const [scelta, setScelta] = useState<string | null>(null);
+  const [scelta, setScelta] = useState<string | null>(
+    () => parametri.get("personalita"),
+  );
+  const daRiprendere = useRef(conversationId);
+  const [avviso, setAvviso] = useState<string | null>(null);
+  const [avvisoDettatura, setAvvisoDettatura] = useState<string | null>(null);
   const [conto, setConto] = useState<Conto | null>(null);
   const voce = useVoce(scelta);
   const volto = useVolto(scelta);
@@ -246,6 +285,51 @@ function Conversazione() {
 
   useEffect(aggiornaConto, [aggiornaConto]);
 
+  /* Riprendere una conversazione: i turni salvati tornano sulla pagina. Le
+   * fonti e le verifiche di allora non si ricostruiscono — stanno nella
+   * traccia della risposta, non nel messaggio — e i turni ripresi si leggono
+   * come testo. */
+  useEffect(() => {
+    const id = daRiprendere.current;
+    if (!id || !token) return;
+    daRiprendere.current = null;
+    leggiMessaggi(token, id)
+      .then((messaggi) =>
+        setTurni(
+          messaggi
+            .filter((m) => m.role !== "system")
+            .map((m): Turno => ({
+              chi: m.role === "user" ? "utente" : "voce",
+              testo: m.content,
+              ora: oraDi(new Date(m.created_at)),
+            })),
+        ),
+      )
+      .catch((e) => {
+        setConversationId(null);
+        ricordaNellIndirizzo(null, null);
+        setAvviso(
+          e instanceof ErroreApi && e.stato === 404
+            ? "Quella conversazione non esiste più: qui ne comincia una nuova."
+            : "Non sono riuscito a riaprire la conversazione.",
+        );
+      });
+  }, [token]);
+
+  /* Il campo cresce con il testo anche quando a scriverlo è la dettatura,
+   * non solo la tastiera. */
+  useEffect(() => {
+    const c = campo.current;
+    if (!c) return;
+    c.style.height = "auto";
+    c.style.height = `${c.scrollHeight}px`;
+  }, [bozza]);
+
+  const aggiungiDettato = useCallback((testo: string) => {
+    setBozza((b) => (b.trim() ? `${b.trimEnd()} ${testo}` : testo));
+    campo.current?.focus();
+  }, []);
+
   useEffect(() => {
     fondo.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turni]);
@@ -261,6 +345,8 @@ function Conversazione() {
     }
 
     setBozza("");
+    setAvviso(null);
+    setAvvisoDettatura(null);
     setInCorso(true);
     setTurni((precedenti) => [
       ...precedenti,
@@ -289,6 +375,7 @@ function Conversazione() {
         switch (evento.tipo) {
           case "inizio":
             setConversationId(evento.conversationId);
+            ricordaNellIndirizzo(evento.conversationId, scelta);
             break;
           case "fonti":
             aggiornaUltimo((t) => ({ ...t, fonti: evento.fonti }));
@@ -348,6 +435,8 @@ function Conversazione() {
           Personalities<span>.</span>
         </div>
 
+        <LinkSezioni />
+
         {personalita.length > 1 && (
           <select
             className={stili.scelta}
@@ -377,6 +466,8 @@ function Conversazione() {
           onClick={() => {
             setTurni([]);
             setConversationId(null);
+            setAvviso(null);
+            ricordaNellIndirizzo(null, null);
             campo.current?.focus();
           }}
           disabled={inCorso || turni.length === 0}
@@ -384,7 +475,7 @@ function Conversazione() {
           Nuova
         </button>
         <button
-          className={stili.azioneTestata}
+          className={`${stili.azioneTestata} ${stili.soloLargo}`}
           onClick={() => auth.signoutRedirect()}
         >
           Esci
@@ -393,6 +484,11 @@ function Conversazione() {
 
       <main className={stili.lettura}>
         <div className={stili.colonna}>
+          {avviso && (
+            <p className={stili.avvisoPagina} role="status">
+              {avviso}
+            </p>
+          )}
           {turni.length === 0 ? (
             <Soglia
               nome={auth.user?.profile.given_name}
@@ -427,11 +523,7 @@ function Conversazione() {
             rows={1}
             placeholder="Scrivi la tua domanda"
             aria-label="La tua domanda"
-            onChange={(e) => {
-              setBozza(e.target.value);
-              e.target.style.height = "auto";
-              e.target.style.height = `${e.target.scrollHeight}px`;
-            }}
+            onChange={(e) => setBozza(e.target.value)}
             onKeyDown={(e) => {
               /* Invio manda, Maiusc+Invio va a capo. Su touch la scorciatoia
                * non si applica: lì il tasto Invio deve andare a capo, perché
@@ -441,6 +533,11 @@ function Conversazione() {
                 invia();
               }
             }}
+          />
+          <Dettatura
+            suTesto={aggiungiDettato}
+            suAvviso={setAvvisoDettatura}
+            disabilitato={inCorso}
           />
           {inCorso ? (
             <button
@@ -472,8 +569,12 @@ function Conversazione() {
             </button>
           )}
         </div>
-        <p className={stili.suggerimento}>
-          <span className={stili.scorciatoia}>Invio per mandare</span>
+        <p className={stili.suggerimento} aria-live="polite">
+          {avvisoDettatura ? (
+            <span className={stili.avvisoDettatura}>{avvisoDettatura}</span>
+          ) : (
+            <span className={stili.scorciatoia}>Invio per mandare</span>
+          )}
           <span>{nomeScelta ?? "senza personalità"}</span>
         </p>
       </div>

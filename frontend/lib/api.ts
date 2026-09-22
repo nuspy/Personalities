@@ -13,6 +13,7 @@ export interface Conversazione {
   id: string;
   title: string | null;
   last_message_at: string | null;
+  personality: string | null;
 }
 
 export interface MessaggioSalvato {
@@ -79,13 +80,25 @@ function intestazioni(token: string): HeadersInit {
 
 async function leggi<T>(risposta: Response): Promise<T> {
   if (!risposta.ok) {
+    /* Il motivo del server, quando c'è: per 402, 403, 409 e 429 è proprio
+     * ciò che serve all'utente — «servono 3 crediti», «il piano non
+     * comprende questa voce», «archivia una conversazione». Un messaggio
+     * generico lo trasformerebbe in un guasto apparente. */
+    let motivo: string | undefined;
+    try {
+      const corpo = await risposta.json();
+      motivo = typeof corpo?.detail === "string" ? corpo.detail : undefined;
+    } catch {
+      /* il corpo non era JSON: restano i codici */
+    }
     throw new ErroreApi(
       risposta.status === 401
         ? "La sessione è scaduta."
-        : "Richiesta non riuscita.",
+        : (motivo ?? "Richiesta non riuscita."),
       risposta.status,
     );
   }
+  if (risposta.status === 204) return undefined as T;
   return risposta.json() as Promise<T>;
 }
 
@@ -245,6 +258,7 @@ function interpreta(blocco: string): EventoChat | null {
 export interface Conto {
   abbonamento: {
     piano: string;
+    nome: string;
     stato: string;
     periodo_fine: string;
     disdetto_il: string | null;
@@ -256,6 +270,8 @@ export interface Conto {
     predefiniti: boolean;
   };
   saldo: number;
+  uso?: Record<string, { usati: number; limite: number | null; restanti: number | null }>;
+  limiti_attivi?: boolean;
 }
 
 export async function leggiConto(token: string): Promise<Conto> {
@@ -329,4 +345,147 @@ export function sorgenteAudio(voce: Voce): string {
   const byte = new Uint8Array(binario.length);
   for (let i = 0; i < binario.length; i++) byte[i] = binario.charCodeAt(i);
   return URL.createObjectURL(new Blob([byte], { type: voce.media_type }));
+}
+
+/* ---- piani e pagamento ---- */
+
+export interface Piano {
+  slug: string;
+  nome: string;
+  prezzo_mensile: number;
+  prezzo_annuale: number;
+  crediti_per_periodo: number;
+  limiti: Record<string, number>;
+  diritti: { categorie?: string[]; voce?: boolean };
+}
+
+export interface Movimento {
+  delta: number;
+  reason: string;
+  quando: string;
+  note: string | null;
+}
+
+export async function elencaPiani(): Promise<Piano[]> {
+  return leggi(await fetch(`${API}/plans`));
+}
+
+export async function leggiMovimenti(token: string): Promise<{ saldo: number; movimenti: Movimento[] }> {
+  return leggi(await fetch(`${API}/me/credits?limite=20`, { headers: intestazioni(token) }));
+}
+
+/** Il piano gratuito si attiva direttamente; gli altri passano dal pagamento.
+ *  Da un piano pagato, il passaggio avviene a fine periodo (`passaggio`). */
+export async function abbonaGratis(
+  token: string, piano: string,
+): Promise<{ passaggio?: { piano: string; dal: string } }> {
+  return leggi(await fetch(`${API}/me/subscription`, {
+    method: "POST", headers: intestazioni(token), body: JSON.stringify({ piano }),
+  }));
+}
+
+export async function apriPagamento(
+  token: string, piano: string, annuale: boolean,
+): Promise<{ checkout_id: string; url: string; importo: number; valuta: string }> {
+  return leggi(await fetch(`${API}/me/checkout`, {
+    method: "POST", headers: intestazioni(token), body: JSON.stringify({ piano, annuale }),
+  }));
+}
+
+export async function statoPagamento(
+  token: string, id: string,
+): Promise<{ checkout_id: string; stato: string; piano: string; nome: string }> {
+  return leggi(await fetch(`${API}/me/checkout/${id}`, { headers: intestazioni(token) }));
+}
+
+export async function disdici(token: string): Promise<unknown> {
+  return leggi(await fetch(`${API}/me/subscription/cancel`, {
+    method: "POST", headers: intestazioni(token),
+  }));
+}
+
+/* ---- memorie ---- */
+
+export interface Memoria {
+  id: string;
+  kind: "identita" | "preferenza" | "fatto" | "impegno" | "sessione";
+  content: string;
+  importance: number;
+  confidence: number;
+  times_referenced: number;
+  first_seen_at: string;
+  last_referenced_at: string | null;
+  valid_to: string | null;
+  superseded_by: string | null;
+  expires_at: string | null;
+  viva: boolean;
+  personality_id: string | null;
+}
+
+export async function elencaMemorie(
+  token: string, includiSuperate = false,
+): Promise<{ memorie: Memoria[]; conteggi: Record<string, number> }> {
+  return leggi(await fetch(
+    `${API}/memory${includiSuperate ? "?includi_superate=true" : ""}`,
+    { headers: intestazioni(token) },
+  ));
+}
+
+export async function storiaMemoria(token: string, id: string): Promise<Memoria[]> {
+  const corpo = await leggi<{ storia?: Memoria[] } | Memoria[]>(
+    await fetch(`${API}/memory/${id}/history`, { headers: intestazioni(token) }),
+  );
+  return Array.isArray(corpo) ? corpo : (corpo.storia ?? []);
+}
+
+export async function aggiungiMemoria(
+  token: string, content: string, kind: string,
+): Promise<Memoria> {
+  return leggi(await fetch(`${API}/memory`, {
+    method: "POST", headers: intestazioni(token),
+    body: JSON.stringify({ content, kind, importance: 0.7 }),
+  }));
+}
+
+export async function dimenticaMemoria(token: string, id: string): Promise<unknown> {
+  return leggi(await fetch(`${API}/memory/${id}`, {
+    method: "DELETE", headers: intestazioni(token),
+  }));
+}
+
+export async function dimenticaTutto(token: string): Promise<unknown> {
+  return leggi(await fetch(`${API}/memory?conferma=true`, {
+    method: "DELETE", headers: intestazioni(token),
+  }));
+}
+
+export async function accessiMemorie(token: string): Promise<
+  { action: string; actor_id: number | null; count: number; reason: string | null; created_at: string }[]
+> {
+  return leggi(await fetch(`${API}/memory/accesses`, { headers: intestazioni(token) }));
+}
+
+/* ---- conversazioni ---- */
+
+export async function archiviaConversazione(token: string, id: string): Promise<unknown> {
+  return leggi(await fetch(`${API}/conversations/${id}/archive`, {
+    method: "POST", headers: intestazioni(token),
+  }));
+}
+
+/* ---- dettatura, ripiego sul server ---- */
+
+export async function trascriviRegistrazione(
+  token: string, audio: Blob,
+): Promise<{ testo: string; fiducia: number; da_confermare: boolean }> {
+  const modulo = new FormData();
+  /* L'estensione segue il formato: Safari registra mp4, gli altri webm, e un
+   * nome che mente sul contenuto confonde chi decodifica. */
+  const estensione = audio.type.includes("mp4") ? "m4a" : audio.type.includes("ogg") ? "ogg" : "webm";
+  modulo.append("file", audio, `dettatura.${estensione}`);
+  /* Niente `Content-Type` a mano: il browser deve scrivere il confine del
+   * multipart, e un'intestazione impostata qui lo cancellerebbe. */
+  return leggi(await fetch(`${API}/voice/listen`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}` }, body: modulo,
+  }));
 }

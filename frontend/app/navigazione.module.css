@@ -1,0 +1,247 @@
+/* L'involucro delle pagine secondarie e la navigazione fra le sezioni.
+ *
+ * Stessa carta e stesso inchiostro della conversazione; cambia la densità:
+ * qui si gestisce, e le informazioni si confrontano invece di leggersi una
+ * alla volta.
+ */
+
+.pagina {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.attesa,
+.soglia {
+  padding: 3rem clamp(1rem, 4vw, 2rem);
+  max-width: 40rem;
+  margin: 0 auto;
+}
+
+.testata {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem clamp(1rem, 4vw, 2rem);
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+  border-bottom: 1px solid var(--filo-tenue);
+  background: color-mix(in srgb, var(--carta) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.marchio {
+  font-family: var(--display), serif;
+  font-size: 1.35rem;
+  letter-spacing: -0.015em;
+  color: var(--inchiostro);
+  text-decoration: none;
+}
+
+.marchio span {
+  color: var(--rubrica);
+}
+
+.navigazioneAlta {
+  display: flex;
+  gap: 0.25rem;
+  margin-right: auto;
+}
+
+.inTestata {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.voce,
+.voceAttiva {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 0.65rem;
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.875rem;
+  color: var(--inchiostro-tenue);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.voce:hover {
+  color: var(--inchiostro);
+}
+
+.voceAttiva {
+  color: var(--inchiostro);
+  border-bottom-color: var(--rubrica);
+}
+
+.esci {
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border: 1px solid var(--filo);
+  background: transparent;
+  color: var(--inchiostro-tenue);
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.8125rem;
+  border-radius: var(--raggio);
+}
+
+.contenuto {
+  flex: 1;
+  width: 100%;
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 2rem clamp(1rem, 4vw, 2rem) 3rem;
+  box-sizing: border-box;
+}
+
+.titolo {
+  font-family: var(--display), serif;
+  font-size: clamp(2rem, 6vw, 2.75rem);
+  font-weight: 400;
+  line-height: 1.1;
+  margin: 0 0 0.4rem;
+}
+
+.sottotitolo {
+  color: var(--inchiostro-tenue);
+  font-family: var(--lettura), serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  max-width: 58ch;
+  margin: 0 0 2rem;
+}
+
+.primaria {
+  min-height: 48px;
+  padding: 0 1.25rem;
+  border: 1px solid var(--inchiostro);
+  background: var(--inchiostro);
+  color: var(--carta);
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.9375rem;
+  border-radius: var(--raggio);
+}
+
+/* ---- menu della conversazione: solo sul telefono ---- */
+
+.menu {
+  display: none;
+}
+
+/* ---- barra in basso: solo sul telefono ---- */
+
+.barraBassa {
+  display: none;
+}
+
+@media (max-width: 40rem) {
+  .navigazioneAlta,
+  .inTestata {
+    display: none;
+  }
+
+  .testata {
+    justify-content: space-between;
+  }
+
+  .menu {
+    display: block;
+    position: relative;
+  }
+
+  .menuApri {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--filo);
+    border-radius: var(--raggio);
+    color: var(--inchiostro-tenue);
+    list-style: none;
+    cursor: pointer;
+    font-size: 1.1rem;
+  }
+
+  .menuApri::-webkit-details-marker {
+    display: none;
+  }
+
+  .menu[open] .menuApri {
+    border-color: var(--inchiostro-debole);
+    color: var(--inchiostro);
+  }
+
+  .menuVoci {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.4rem);
+    z-index: 20;
+    min-width: 13rem;
+    display: flex;
+    flex-direction: column;
+    background: var(--carta);
+    border: 1px solid var(--filo);
+    border-radius: var(--raggio);
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--inchiostro) 12%, transparent);
+    padding: 0.25rem 0;
+  }
+
+  .menuVoce {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 48px;
+    padding: 0 1rem;
+    border: 0;
+    background: transparent;
+    color: var(--inchiostro);
+    font-family: var(--interfaccia), sans-serif;
+    font-size: 0.9375rem;
+    text-align: left;
+    text-decoration: none;
+  }
+
+  .menuVoce + .menuVoce {
+    border-top: 1px solid var(--filo-tenue);
+  }
+
+  .barraBassa {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--filo-tenue);
+    background: color-mix(in srgb, var(--carta) 94%, transparent);
+    backdrop-filter: blur(8px);
+    /* La barra di gesture di iOS morde gli ultimi millimetri. */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .scheda,
+  .schedaAttiva {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.1rem;
+    min-height: 56px;
+    font-family: var(--interfaccia), sans-serif;
+    font-size: 0.6875rem;
+    color: var(--inchiostro-debole);
+    text-decoration: none;
+  }
+
+  .schedaAttiva {
+    color: var(--rubrica);
+  }
+
+  .segno {
+    font-size: 1.1rem;
+    line-height: 1;
+  }
+}

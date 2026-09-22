@@ -18,11 +18,10 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
-from sqlalchemy import and_, exists, or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.base import utcnow
-from ..domain.memory_models import Memory
 from ..domain.models import Conversation, Message
 from ..knowledge.embedding import Embedder
 from ..llm.base import Message as MessaggioLLM
@@ -71,28 +70,32 @@ class ChiusuraConversazioni:
         self._limite_per_utente = limite_per_utente
 
     async def da_chiudere(self, *, limite: int = 20) -> Sequence[Conversation]:
-        """Le conversazioni ferme da abbastanza tempo e mai estratte.
+        """Le conversazioni finite e non ancora estratte dopo l'ultimo messaggio.
 
-        Il filtro sull'assenza di memorie è ciò che rende l'operazione
-        ripetibile: senza, ogni passaggio del worker riestrarrebbe le stesse
-        conversazioni, moltiplicando le memorie a ogni giro.
+        Finite vuol dire ferme da abbastanza tempo, **oppure archiviate**:
+        archiviare è chi scrive che dice di aver finito, e aspettare il
+        silenzio non aggiunge nulla. Il segno `memories_extracted_at` è ciò
+        che rende l'operazione ripetibile: senza, ogni passaggio del worker
+        riestrarrebbe le stesse conversazioni, moltiplicando le memorie a ogni
+        giro.
         """
         soglia = utcnow() - timedelta(minutes=SILENZIO_MINUTI)
-
-        gia_estratta = (
-            select(Memory.id)
-            .join(Message, Message.id == Memory.source_message_id)
-            .where(Message.conversation_id == Conversation.id)
-            .limit(1)
-        )
 
         return (await self._session.execute(
             select(Conversation)
             .where(
                 Conversation.last_message_at.is_not(None),
-                Conversation.last_message_at < soglia,
-                Conversation.status == "active",
-                ~exists(gia_estratta),
+                or_(
+                    Conversation.memories_extracted_at.is_(None),
+                    Conversation.memories_extracted_at < Conversation.last_message_at,
+                ),
+                or_(
+                    and_(
+                        Conversation.status == "active",
+                        Conversation.last_message_at < soglia,
+                    ),
+                    Conversation.status == "archived",
+                ),
             )
             .order_by(Conversation.last_message_at)
             .limit(limite)
@@ -179,6 +182,10 @@ class ChiusuraConversazioni:
         for conversazione in await self.da_chiudere(limite=limite):
             try:
                 esiti.append(await self.chiudi(conversazione))
+                # Anche quando è stata saltata: una conversazione troppo breve
+                # resta tale finché nessuno ci scrive, e ripeterla a ogni
+                # passata toglierebbe il posto a quelle che hanno qualcosa.
+                conversazione.memories_extracted_at = utcnow()
             except Exception:
                 # Una conversazione che fallisce non deve fermare le altre:
                 # il worker gira periodicamente, e bloccarsi sulla prima

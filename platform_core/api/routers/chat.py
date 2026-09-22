@@ -34,7 +34,7 @@ from ...billing.plans import GestoreAbbonamenti
 from ...billing.quote import ContatoreQuote, QuotaSuperata
 from ...billing.tariffe import costo_risposta
 from ...api.deps import get_embedder, get_guardrail, get_llm_provider
-from ...domain.knowledge_models import CommercialCategory, PersonalityVersion
+from ...domain.knowledge_models import CommercialCategory, Personality, PersonalityVersion
 from ...domain.models import Conversation
 from ...domain.repositories import (
     ConversationRepository, PersonalityRepository, TraceRepository,
@@ -532,7 +532,14 @@ async def elenco_conversazioni(
     conversazioni = await ConversationRepository(session).list_recent(
         user, limit=min(limit, 200), offset=offset,
     )
-    return [ConversationSummary.of(c) for c in conversazioni]
+    # Lo slug della personalità in una sola query: serve al client per
+    # riprendere la conversazione con la voce giusta, e una query per riga
+    # renderebbe lenta proprio la pagina che elenca tutto.
+    ids = {c.personality_id for c in conversazioni if c.personality_id}
+    slug = dict((await session.execute(
+        select(Personality.id, Personality.slug).where(Personality.id.in_(ids))
+    )).all()) if ids else {}
+    return [ConversationSummary.of(c, slug.get(c.personality_id)) for c in conversazioni]
 
 
 @router.post("/conversations/{conversation_id}/archive")

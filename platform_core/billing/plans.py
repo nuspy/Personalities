@@ -200,6 +200,12 @@ class GestoreAbbonamenti:
         """
         precedente = await self.abbonamento_di(user_id)
         if precedente is not None:
+            # Disdetto anche presso il fornitore, se non lo era già. Chiuderlo
+            # soltanto qui lasciava il fornitore libero di rinnovare — e di
+            # addebitare — un piano che l'utente non aveva più: chi passava
+            # da Base a Gold avrebbe pagato entrambi.
+            if precedente.external_id and precedente.cancel_at is None:
+                await self._provider.disdici(precedente.external_id)
             # Chiuso e non cancellato: il passaggio da un piano all'altro
             # resta leggibile nella storia dell'utente.
             precedente.status = "disdetto"

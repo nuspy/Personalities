@@ -1,0 +1,406 @@
+/* Gli elementi delle pagine secondarie: sezioni, schede, misuratori, righe. */
+
+.sezione {
+  margin: 0 0 2.5rem;
+}
+
+.sezioneTitolo {
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--inchiostro-debole);
+  margin: 0 0 0.9rem;
+}
+
+.nota {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--inchiostro-tenue);
+  margin: 0.4rem 0 0;
+}
+
+.errore {
+  color: var(--allarme);
+  font-size: 0.9375rem;
+  margin: 0.75rem 0;
+}
+
+.avviso {
+  border-left: 3px solid var(--rubrica);
+  background: color-mix(in srgb, var(--rubrica) 7%, var(--superficie));
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: 0 0 1.5rem;
+}
+
+.avvisoBuono {
+  composes: avviso;
+  border-left-color: var(--quiete);
+  background: color-mix(in srgb, var(--quiete) 8%, var(--superficie));
+}
+
+.vuoto {
+  border: 1px dashed var(--filo);
+  padding: 2rem 1.25rem;
+  text-align: center;
+  color: var(--inchiostro-tenue);
+  font-family: var(--lettura), serif;
+  line-height: 1.6;
+  margin: 0 0 2.5rem;
+}
+
+.casella {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 44px;
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: var(--inchiostro-tenue);
+  cursor: pointer;
+}
+
+.casella input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--inchiostro);
+}
+
+/* ---- pulsanti ---- */
+
+.primaria,
+.secondaria,
+.distruttiva {
+  min-height: 44px;
+  padding: 0 1rem;
+  border-radius: var(--raggio);
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.primaria {
+  border: 1px solid var(--inchiostro);
+  background: var(--inchiostro);
+  color: var(--carta);
+}
+
+.secondaria {
+  border: 1px solid var(--filo);
+  background: transparent;
+  color: var(--inchiostro-tenue);
+}
+
+.distruttiva {
+  border: 1px solid var(--filo);
+  background: transparent;
+  color: var(--allarme);
+}
+
+.primaria:disabled,
+.secondaria:disabled,
+.distruttiva:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.primaria:focus-visible,
+.secondaria:focus-visible,
+.distruttiva:focus-visible {
+  outline: 2px solid var(--rubrica-tenue);
+  outline-offset: 2px;
+}
+
+/* ---- il piano attuale ---- */
+
+.attuale {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1rem 1.5rem;
+  align-items: start;
+  border: 1px solid var(--filo-tenue);
+  background: var(--superficie);
+  padding: 1.25rem;
+}
+
+.attualeNome {
+  font-family: var(--display), serif;
+  font-size: 1.75rem;
+  line-height: 1.1;
+}
+
+.saldo {
+  text-align: right;
+}
+
+.saldoNumero {
+  font-family: var(--display), serif;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.misure {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.misura {
+  font-size: 0.8125rem;
+  color: var(--inchiostro-tenue);
+}
+
+.traccia {
+  height: 6px;
+  background: var(--filo-tenue);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 0.35rem 0 0.25rem;
+}
+
+.riempimento {
+  display: block;
+  height: 100%;
+  background: var(--inchiostro-tenue);
+}
+
+.riempimentoPieno {
+  composes: riempimento;
+  background: var(--rubrica);
+}
+
+/* ---- il catalogo ---- */
+
+.periodo {
+  display: inline-flex;
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  margin: 0 0 1rem;
+}
+
+.periodo button {
+  min-height: 40px;
+  padding: 0 0.9rem;
+  border: 0;
+  background: transparent;
+  color: var(--inchiostro-tenue);
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.8125rem;
+}
+
+.periodo button[aria-pressed="true"] {
+  background: var(--inchiostro);
+  color: var(--carta);
+}
+
+.catalogo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.piano,
+.pianoAttuale {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid var(--filo-tenue);
+  background: var(--superficie);
+  padding: 1.1rem;
+}
+
+.pianoAttuale {
+  border-color: var(--rubrica-tenue);
+  box-shadow: inset 0 3px 0 var(--rubrica);
+}
+
+.pianoNome {
+  font-family: var(--display), serif;
+  font-size: 1.5rem;
+  line-height: 1.1;
+}
+
+.prezzo {
+  font-family: var(--display), serif;
+  font-size: 1.25rem;
+}
+
+.prezzo small {
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.75rem;
+  color: var(--inchiostro-debole);
+}
+
+.voci {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--inchiostro-tenue);
+  flex: 1;
+}
+
+.conferma {
+  border-left: 3px solid var(--rubrica);
+  background: color-mix(in srgb, var(--rubrica) 7%, var(--superficie));
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.conferma p {
+  margin: 0 0 0.6rem;
+}
+
+/* ---- elenchi: memorie, conversazioni, movimenti ---- */
+
+.elenco {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 1px solid var(--filo-tenue);
+}
+
+.riga {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.25rem 1rem;
+  align-items: start;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--filo-tenue);
+}
+
+/* Un movimento è una riga di registro: l'importo resta a destra anche sul
+ * telefono, dove lo si cerca con l'occhio scorrendo. */
+.movimento {
+  composes: riga;
+}
+
+@media (max-width: 40rem) {
+  .riga.movimento,
+  .movimento {
+    grid-template-columns: 1fr auto;
+  }
+}
+
+.rigaTesto {
+  font-family: var(--lettura), serif;
+  font-size: 1rem;
+  line-height: 1.55;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Il titolo è anche il bersaglio: alto quanto un dito, non quanto la riga. */
+.titoloCollegato {
+  display: inline-block;
+  padding: 0.5rem 0;
+  min-height: 44px;
+  box-sizing: border-box;
+  text-decoration: none;
+}
+
+.titoloCollegato:hover {
+  text-decoration: underline;
+}
+
+.rigaDettagli {
+  font-family: var(--apparato), monospace;
+  font-size: 0.6875rem;
+  color: var(--inchiostro-debole);
+  margin: 0.2rem 0 0;
+}
+
+.rigaAzioni {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.storia {
+  grid-column: 1 / -1;
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--superficie-alta);
+  border-left: 2px solid var(--filo);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.storia p {
+  margin: 0.2rem 0;
+}
+
+.superata {
+  text-decoration: line-through;
+  color: var(--inchiostro-debole);
+}
+
+.genere {
+  display: inline-block;
+  font-family: var(--apparato), monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  color: var(--inchiostro-tenue);
+  margin-right: 0.4rem;
+}
+
+.positivo {
+  color: var(--quiete);
+}
+
+.negativo {
+  color: var(--allarme);
+}
+
+.modulo {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0 0 1.25rem;
+}
+
+.ingresso {
+  flex: 1 1 16rem;
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border: 1px solid var(--filo);
+  background: var(--superficie);
+  color: var(--inchiostro);
+  border-radius: var(--raggio);
+  font-size: 1rem;
+  font-family: var(--interfaccia), sans-serif;
+}
+
+.ingresso:focus-visible {
+  outline: 2px solid var(--rubrica-tenue);
+  outline-offset: 1px;
+}
+
+@media (max-width: 40rem) {
+  .attuale {
+    grid-template-columns: 1fr;
+  }
+
+  .saldo {
+    text-align: left;
+  }
+
+  .riga {
+    grid-template-columns: 1fr;
+  }
+
+  .rigaAzioni {
+    justify-content: flex-start;
+  }
+}

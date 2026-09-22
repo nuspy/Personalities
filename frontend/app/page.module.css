@@ -311,6 +311,29 @@
   gap: 1rem;
 }
 
+/* Ciò che la dettatura sta facendo, al posto della scorciatoia: è la riga
+ * che l'occhio guarda mentre si parla. */
+.avvisoDettatura {
+  color: var(--rubrica);
+  overflow-wrap: anywhere;
+}
+
+.avvisoPagina {
+  border-left: 3px solid var(--rubrica);
+  padding: 0.6rem 0.9rem;
+  margin: 0 0 1.5rem;
+  font-size: 0.9375rem;
+  color: var(--inchiostro-tenue);
+}
+
+/* Sul telefono l'uscita sta nel menu delle sezioni: la testata ha già marchio,
+ * scelta, «Nuova» e il menu, e un pulsante in più la farebbe andare a capo. */
+@media (max-width: 40rem) {
+  .soloLargo {
+    display: none;
+  }
+}
+
 /* Su touch la scorciatoia da tastiera non esiste: dirla sarebbe rumore. */
 @media (hover: none) {
   .scorciatoia {

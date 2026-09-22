@@ -25,7 +25,7 @@ from typing import Annotated, Any, Dict, List, Optional
 import html
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
@@ -86,6 +86,7 @@ def _abbonamento_json(a) -> Optional[Dict[str, Any]]:
     return {
         "id": str(a.id),
         "piano": a.plan.slug,
+        "nome": a.plan.name,
         "stato": a.status,
         "periodo_inizio": a.period_start.isoformat(),
         "periodo_fine": a.period_end.isoformat(),
@@ -145,8 +146,15 @@ async def i_miei_crediti(
 @router.post("/me/subscription", status_code=status.HTTP_201_CREATED)
 async def sottoscrivi(
     payload: Sottoscrizione, user: CurrentUser, session: DbSession,
+    risposta: Response,
 ) -> Dict[str, Any]:
-    """Apre un abbonamento, chiudendo il precedente."""
+    """Apre un abbonamento gratuito, chiudendo il precedente.
+
+    Da un piano pagato al gratuito **non si passa subito**: il periodo è già
+    stato pagato, e toglierlo adesso sarebbe prendere senza dare. Il piano
+    pagato viene disdetto a fine periodo (202), e il gratuito lo apre la
+    manutenzione quando quello scade — è lo stesso percorso di una disdetta.
+    """
     gestore = GestoreAbbonamenti(session)
     piano = await gestore.piano_per_slug(payload.piano)
     if piano is None or not piano.active:
@@ -156,6 +164,27 @@ async def sottoscrivi(
         )
 
     prezzo = piano.price_yearly if payload.annuale else piano.price_monthly
+    attuale = await gestore.abbonamento_di(user.id)
+    if (
+        prezzo <= 0
+        and attuale is not None
+        and attuale.plan_id != piano.id
+        and (attuale.plan.price_monthly > 0 or attuale.plan.price_yearly > 0)
+    ):
+        if attuale.cancel_at is None:
+            await gestore.disdici(attuale)
+        await session.commit()
+        await session.refresh(attuale, ["plan"])
+        risposta.status_code = status.HTTP_202_ACCEPTED
+        return {
+            "abbonamento": _abbonamento_json(attuale),
+            "saldo": await RegistroCrediti(session).saldo(user.id),
+            "passaggio": {
+                "piano": piano.slug,
+                "dal": attuale.period_end.isoformat(),
+            },
+        }
+
     if prezzo > 0:
         # Il varco che c'era: questo endpoint attivava qualunque piano, anche
         # il più caro, senza passare da nessun pagamento. Un piano che costa
@@ -222,7 +251,12 @@ async def stato_checkout(
     checkout = await session.get(PaymentCheckout, checkout_id)
     if checkout is None or checkout.user_id != user.id:
         raise HTTPException(status_code=404, detail="Pagamento non trovato")
-    return {"checkout_id": str(checkout.id), "stato": checkout.status, "piano": checkout.plan.slug}
+    return {
+        "checkout_id": str(checkout.id),
+        "stato": checkout.status,
+        "piano": checkout.plan.slug,
+        "nome": checkout.plan.name,
+    }
 
 
 @router.post("/billing/webhook")
