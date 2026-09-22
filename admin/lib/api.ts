@@ -23,15 +23,19 @@ async function chiamata<T>(
   percorso: string,
   opzioni: RequestInit = {},
 ): Promise<T> {
-  const risposta = await fetch(`${API}${percorso}`, {
-    ...opzioni,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...(opzioni.headers ?? {}),
-    },
-  });
+  return leggi<T>(
+    await fetch(`${API}${percorso}`, {
+      ...opzioni,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...(opzioni.headers ?? {}),
+      },
+    }),
+  );
+}
 
+async function leggi<T>(risposta: Response): Promise<T> {
   if (!risposta.ok) {
     let dettaglio: string | undefined;
     try {
@@ -40,7 +44,9 @@ async function chiamata<T>(
       /* il corpo non era JSON: il codice di stato basta */
     }
     throw new ErroreApi(
-      risposta.status === 403
+      /* Il 403 generico è il ruolo che manca; quando il servizio spiega un
+       * rifiuto più preciso, vale la sua spiegazione. */
+      risposta.status === 403 && !dettaglio
         ? "Il tuo account non ha il ruolo di amministratore."
         : risposta.status === 401
           ? "La sessione è scaduta."
@@ -302,6 +308,46 @@ export const eliminaDocumento = (t: string, kbId: string, docId: string) =>
     `/admin/knowledge-bases/${kbId}/documents/${docId}`,
     { method: "DELETE" },
   );
+
+/* ---- caricamento di documenti ---- */
+
+export interface FormatiCaricabili {
+  formati: Record<string, string>;
+  byte_massimi: number;
+  file_massimi: number;
+}
+
+export interface EsitoIngestione {
+  documenti: number;
+  passaggi: number;
+  saltati: { nome: string; motivo: string }[];
+  falliti: { nome: string; motivo: string }[];
+  avvisi: { nome: string; avviso: string }[];
+}
+
+export const formatiCaricabili = (t: string) =>
+  chiamata<FormatiCaricabili>(t, "/admin/ingestion/formats");
+
+/** Carica file in un corpus. Restituisce il lavoro che li leggerà. */
+export async function caricaDocumenti(
+  t: string,
+  kbId: string,
+  file: File[],
+  lingua: string | null,
+): Promise<{ build_id: string; stato: string; lingua: string | null }> {
+  const modulo = new FormData();
+  for (const f of file) modulo.append("file", f, f.name);
+  if (lingua) modulo.append("lingua", lingua);
+  /* Niente `Content-Type` a mano: il confine del multipart lo scrive il
+   * browser, e un'intestazione impostata qui lo cancellerebbe. */
+  return leggi(
+    await fetch(`${API}/admin/knowledge-bases/${kbId}/uploads`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${t}` },
+      body: modulo,
+    }),
+  );
+}
 
 export const statoDigestione = (t: string, kbId: string) =>
   chiamata<StatoDigestione>(t, `/admin/knowledge-bases/${kbId}/digestion`);

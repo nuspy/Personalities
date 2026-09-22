@@ -20,3 +20,7 @@ __pycache__/
 # nessuno se ne accorga finché non serve ripristinarlo.
 /builds/
 /artifacts/
+
+# I file caricati dalla console in attesa del worker: copie di documenti
+# altrui, non sorgenti del progetto.
+data/caricamenti/

@@ -23,8 +23,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="platform_core.builds")
     parser.add_argument("--worker-id", default=None)
     parser.add_argument(
-        "--solo-digestione", action="store_true",
-        help="prende solo le analisi dei corpora: non serve un acceleratore",
+        "--solo-digestione", "--senza-acceleratore", action="store_true",
+        dest="solo_digestione",
+        help=(
+            "prende solo i lavori che non chiedono una GPU — digestione e "
+            "ingestione dei corpora"
+        ),
     )
     args = parser.parse_args(argv)
 

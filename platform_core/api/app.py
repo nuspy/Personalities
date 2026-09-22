@@ -23,7 +23,8 @@ from ..observability.tracing import (
 )
 from ..settings import get_settings
 from .routers import (
-    admin, billing, builds, capabilities, chat, digestion, memory, voice,
+    admin, billing, builds, capabilities, caricamenti, chat, digestion, memory,
+    voice,
 )
 
 logger = logging.getLogger(__name__)
@@ -132,6 +133,7 @@ def create_app() -> FastAPI:
     app.include_router(memory.router)
     app.include_router(memory.admin_router)
     app.include_router(digestion.router)
+    app.include_router(caricamenti.router)
     app.include_router(billing.router)
     app.include_router(billing.router_admin)
     app.include_router(voice.router)

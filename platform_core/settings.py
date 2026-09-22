@@ -86,6 +86,18 @@ class Settings(BaseSettings):
     api_public_url: str = "http://localhost:8100"
     web_public_url: str = "http://localhost:3000"
 
+    # --- caricamenti dalla console -----------------------------------------
+    #: Dove la console deposita i file da ingerire finché il worker non li
+    #: legge. In Kubernetes è un volume condiviso fra API e worker CPU
+    #: (ReadWriteMany): stanno su pod diversi, e un file scritto sul disco
+    #: effimero dell'API il worker non lo vedrebbe mai.
+    upload_dir: str = "data/caricamenti"
+    #: Il limite per file, in megabyte. Un'ora di parlato compresso sta sotto
+    #: i cento; oltre, conviene l'ingestione da riga di comando sul nodo.
+    upload_max_mb: int = 200
+    #: Il modello Whisper per l'audio e il video caricati dalla console.
+    transcription_model: str = "large-v3"
+
     # --- osservabilita' ----------------------------------------------------
     otlp_endpoint: str = "http://localhost:4318"
     tracing_enabled: bool = True

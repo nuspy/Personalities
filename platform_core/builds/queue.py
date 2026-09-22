@@ -17,6 +17,14 @@ elabora, il job resta lì invece di svanire: lo si ritrova, e si decide cosa
 farne. Una `BRPOP` semplice lo toglierebbe dalla coda senza lasciare traccia,
 e un worker ucciso a metà porterebbe con sé il lavoro senza che nessuno sappia
 che era in corso.
+
+**Due code, non una.** Gli addestramenti vogliono un acceleratore; digestione
+e ingestione no — interrogano un modello o leggono file. Con una coda sola un
+worker senza GPU avrebbe preso anche gli addestramenti, facendoli fallire uno
+dopo l'altro: la coda si svuota, i job sembrano lavorati, e nessuno ha
+addestrato nulla. Ciascun job va nella coda del suo tipo, e ciascun worker
+legge solo le code di ciò che sa fare: quello con la GPU entrambe, quello
+senza solo la sua.
 """
 from __future__ import annotations
 
@@ -24,12 +32,28 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, List, Optional, Protocol, Sequence
 
 logger = logging.getLogger(__name__)
 
-#: La coda dei job da fare.
+#: La coda dei job che richiedono un acceleratore. Il nome è quello di prima
+#: della separazione: i job già accodati allora erano tutti di questo tipo.
 CODA = "builds:in_coda"
+
+#: La coda dei job che un nodo senza acceleratore sa eseguire.
+CODA_SENZA_ACCELERATORE = "builds:in_coda:cpu"
+
+#: I tipi che non chiedono una GPU.
+TIPI_SENZA_ACCELERATORE = frozenset({"digestione", "ingestione"})
+
+#: Tutte le code, nell'ordine in cui le legge un worker con acceleratore:
+#: prima il lavoro che solo lui sa fare.
+TUTTE_LE_CODE = (CODA, CODA_SENZA_ACCELERATORE)
+
+
+def coda_per(kind: str) -> str:
+    """La coda in cui va un job di questo tipo."""
+    return CODA_SENZA_ACCELERATORE if kind in TIPI_SENZA_ACCELERATORE else CODA
 
 #: I job presi in carico, per worker: `builds:in_carico:<worker_id>`.
 PREFISSO_IN_CARICO = "builds:in_carico:"
@@ -111,19 +135,36 @@ class CodaBuild:
         return cls(client)
 
     def accoda(self, job: JobBuild) -> None:
-        self._supporto.lpush(CODA, job.to_json())
-        logger.info("Job accodato: %s (%s)", job.build_id, job.kind)
+        coda = coda_per(job.kind)
+        self._supporto.lpush(coda, job.to_json())
+        logger.info("Job accodato in %s: %s (%s)", coda, job.build_id, job.kind)
 
-    def prendi(self, worker_id: str, *, attesa: int = ATTESA_SECONDI) -> Optional[JobBuild]:
-        """Prende un job, spostandolo fra le prese in carico.
+    def prendi(
+        self,
+        worker_id: str,
+        *,
+        attesa: int = ATTESA_SECONDI,
+        code: Sequence[str] = TUTTE_LE_CODE,
+    ) -> Optional[JobBuild]:
+        """Prende un job da una delle code, spostandolo fra le prese in carico.
 
         Restituisce `None` allo scadere dell'attesa: non è un errore, è la
         condizione normale di una coda vuota — e restituirla permette al
         worker di controllare se deve fermarsi.
+
+        Le code si guardano una dopo l'altra, dividendo l'attesa: `BRPOPLPUSH`
+        ne legge una sola, e l'alternativa con più chiavi (`BLMPOP`) non sposta
+        il job fra le prese in carico — che è proprio ciò che lo salva quando
+        il worker muore.
         """
-        grezzo = self._supporto.brpoplpush(
-            CODA, self._in_carico(worker_id), timeout=attesa,
-        )
+        grezzo = None
+        porzione = max(1, attesa // max(1, len(code)))
+        for coda in code:
+            grezzo = self._supporto.brpoplpush(
+                coda, self._in_carico(worker_id), timeout=porzione,
+            )
+            if grezzo is not None:
+                break
         if grezzo is None:
             return None
 
@@ -143,8 +184,8 @@ class CodaBuild:
         """Toglie il job dalle prese in carico. Da chiamare a lavoro finito."""
         self._supporto.lrem(self._in_carico(worker_id), 1, job.to_json())
 
-    def in_attesa(self) -> int:
-        return int(self._supporto.llen(CODA))
+    def in_attesa(self, *, code: Sequence[str] = TUTTE_LE_CODE) -> int:
+        return sum(int(self._supporto.llen(c)) for c in code)
 
     def in_carico(self, worker_id: str) -> List[JobBuild]:
         """I job che questo worker aveva preso.
@@ -169,25 +210,31 @@ class CodaBuild:
 
 
 class CodaInMemoria:
-    """Coda di prova, con la stessa semantica di quella su Redis."""
+    """Coda di prova, con la stessa semantica di quella su Redis.
+
+    Una lista per nome, come Redis: con una lista sola per tutte le chiavi le
+    code separate sarebbero indistinguibili, e la prova che un worker senza
+    acceleratore non prende gli addestramenti passerebbe per caso.
+    """
 
     def __init__(self) -> None:
-        self._coda: List[str] = []
-        self._prese: Dict[str, List[str]] = {}
+        self._liste: Dict[str, List[str]] = {}
 
     def lpush(self, name: str, *values: Any) -> int:
-        self._coda[0:0] = [str(v) for v in values]
-        return len(self._coda)
+        lista = self._liste.setdefault(name, [])
+        lista[0:0] = [str(v) for v in values]
+        return len(lista)
 
     def brpoplpush(self, src: str, dst: str, timeout: int = 0) -> Any:
-        if not self._coda:
+        sorgente = self._liste.get(src, [])
+        if not sorgente:
             return None
-        valore = self._coda.pop()
-        self._prese.setdefault(dst, []).insert(0, valore)
+        valore = sorgente.pop()
+        self._liste.setdefault(dst, []).insert(0, valore)
         return valore
 
     def lrem(self, name: str, count: int, value: Any) -> int:
-        lista = self._prese.get(name, [])
+        lista = self._liste.get(name, [])
         testo = str(value)
         if testo in lista:
             lista.remove(testo)
@@ -195,7 +242,7 @@ class CodaInMemoria:
         return 0
 
     def llen(self, name: str) -> int:
-        return len(self._coda)
+        return len(self._liste.get(name, []))
 
     def lrange(self, name: str, start: int, end: int) -> List[Any]:
-        return list(self._prese.get(name, []))
+        return list(self._liste.get(name, []))

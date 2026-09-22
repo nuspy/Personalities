@@ -175,62 +175,6 @@
   accent-color: var(--inchiostro);
 }
 
-.avanzamento {
-  margin-top: 1rem;
-}
-
-.avanzamentoTraccia {
-  height: 4px;
-  background: var(--filo-tenue);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.avanzamentoRiempimento {
-  height: 100%;
-  background: var(--rubrica);
-  transition: width 0.3s ease-out;
-}
-
-.avanzamentoRiga {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  font-family: var(--apparato), monospace;
-  font-size: 0.75rem;
-  color: var(--inchiostro-tenue);
-  margin-top: 0.5rem;
-}
-
-.diario {
-  list-style: none;
-  margin: 0.75rem 0 0;
-  padding: 0.6rem 0.8rem;
-  max-height: 11rem;
-  overflow-y: auto;
-  background: var(--superficie-alta);
-  border: 1px solid var(--filo-tenue);
-  border-radius: var(--raggio);
-  font-family: var(--apparato), monospace;
-  font-size: 0.75rem;
-  line-height: 1.6;
-}
-
-.diario li {
-  display: flex;
-  gap: 0.6rem;
-}
-
-.diarioPercento {
-  color: var(--inchiostro-debole);
-  min-width: 2.5rem;
-  text-align: right;
-}
-
-.diarioErrore {
-  color: var(--allarme);
-}
-
 /* ---- filtri ---- */
 
 .filtri {

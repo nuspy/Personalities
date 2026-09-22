@@ -432,6 +432,21 @@ class AdminKnowledgeRepository(_ConAudit):
         )
 
 
+    async def registra_caricamento(
+        self, kb: KnowledgeBase, *, build_id: uuid.UUID, file: List[Dict[str, Any]],
+    ) -> None:
+        """Chi ha caricato cosa, e in quale lavoro.
+
+        Si registra al caricamento e non all'indicizzazione: è l'atto di chi
+        amministra, ed è il momento in cui un documento sbagliato entra nel
+        sistema — da lì in poi lo fa il worker, che non è nessuno.
+        """
+        await self._registra(
+            "kb.documenti_caricati", tipo="knowledge_base", target_id=kb.id,
+            dopo={"build_id": str(build_id), "file": file},
+        )
+
+
 class TassonomiaRepository(_ConAudit):
     """Tipi e categorie commerciali: il vocabolario del catalogo."""
 

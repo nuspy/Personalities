@@ -66,6 +66,10 @@ def _build_json(b) -> Dict[str, Any]:
         "error": b.error,
         "worker_id": b.worker_id,
         "artifact_path": b.artifact_path,
+        # L'esito di un lavoro senza file — quanti documenti una ingestione
+        # ha aggiunto, quanti passaggi una digestione ha classificato — sta
+        # qui: senza, la console saprebbe solo «riuscita».
+        "artifact_meta": b.artifact_meta,
         "created_at": b.created_at.isoformat(),
         "started_at": b.started_at.isoformat() if b.started_at else None,
         "finished_at": b.finished_at.isoformat() if b.finished_at else None,

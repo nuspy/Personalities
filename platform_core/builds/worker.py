@@ -16,12 +16,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional, Sequence
 
 from ..capabilities.probe import probe
 from ..capabilities.registry import CapabilityRegistry, Feature
 from ..domain.session import dispose_engine, get_session_factory
-from .queue import CodaBuild, JobBuild
+from .queue import CODA_SENZA_ACCELERATORE, TUTTE_LE_CODE, CodaBuild, JobBuild
 from .repository import BuildRepository
 from .runner import BuildFallita, EsitoBuild, Runner
 
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from ..knowledge.digest_runner import DigestioneCorpus
+    from ..knowledge.ingestione import IngestioneCaricamenti
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,19 @@ def _digestione_predefinita(session: "AsyncSession") -> "DigestioneCorpus":
     )
 
 
+#: Come si costruisce l'ingestione, data una sessione. Iniettabile per la
+#: stessa ragione della digestione: provarne il percorso senza un modello di
+#: embedding vero e senza Whisper.
+FabbricaIngestione = Callable[["AsyncSession"], "IngestioneCaricamenti"]
+
+
+def _ingestione_predefinita(session: "AsyncSession") -> "IngestioneCaricamenti":
+    from ..knowledge.embedding import OpenAICompatibleEmbedder
+    from ..knowledge.ingestione import IngestioneCaricamenti
+
+    return IngestioneCaricamenti(session, OpenAICompatibleEmbedder())
+
+
 class WorkerBuild:
     def __init__(
         self,
@@ -71,12 +85,18 @@ class WorkerBuild:
         registry: Optional[CapabilityRegistry] = None,
         runner: Optional[Runner] = None,
         digestione: Optional[FabbricaDigestione] = None,
+        ingestione: Optional[FabbricaIngestione] = None,
+        code: Sequence[str] = TUTTE_LE_CODE,
     ) -> None:
         self.worker_id = worker_id
         self._coda = coda
         self._registry = registry
         self._runner = runner or Runner()
         self._digestione = digestione or _digestione_predefinita
+        self._ingestione = ingestione or _ingestione_predefinita
+        #: Le code che questo worker legge: senza acceleratore, solo quella
+        #: dei lavori che non ne chiedono uno.
+        self._code = tuple(code)
         self._fermarsi = asyncio.Event()
 
     def ferma(self) -> None:
@@ -96,7 +116,7 @@ class WorkerBuild:
             # In un thread: `brpoplpush` è bloccante, e nel loop fermerebbe
             # tutto — compreso il battito che annuncia le capacità.
             job = await asyncio.get_running_loop().run_in_executor(
-                None, self._coda.prendi, self.worker_id,
+                None, lambda: self._coda.prendi(self.worker_id, code=self._code),
             )
             if job is None:
                 continue
@@ -185,6 +205,8 @@ class WorkerBuild:
                 # sincroni, mentre qui è già tutto asincrono — e interroga il
                 # database, che da un altro thread non si può.
                 esito = await self._digerisci(build_id, parametri, annota)
+            elif tipo == "ingestione":
+                esito = await self._ingerisci(build_id, parametri, annota)
             else:
                 esito = await self._runner.esegui(
                     build_id=build_id, kind=tipo, params=parametri,
@@ -265,6 +287,60 @@ class WorkerBuild:
 
         return EsitoBuild(artifact_path=None, meta=esito.to_dict())
 
+    async def _ingerisci(self, build_id, parametri, annota):
+        """Legge i file caricati dalla console e li aggiunge al corpus.
+
+        Come la digestione, fuori dal `Runner`: scrive sul database a ogni
+        documento, e lo fa dal loop. I file si tolgono dall'archivio a lavoro
+        finito, riuscito o no: il testo vive nei passaggi, e una copia del
+        documento originale tenuta «per sicurezza» è una copia di cui nessuno
+        risponde — spesso di un'opera coperta da diritti.
+        """
+        import uuid as _uuid
+
+        from ..domain.knowledge_models import KnowledgeBase
+
+        kb_id = parametri.get("kb_id")
+        file = parametri.get("file") or []
+        if not kb_id or not file:
+            raise BuildFallita("nessun file da ingerire")
+
+        try:
+            async with get_session_factory()() as session:
+                kb = await session.get(KnowledgeBase, _uuid.UUID(kb_id))
+                if kb is None:
+                    raise BuildFallita(f"knowledge base {kb_id} non trovata")
+
+                ingestione = self._ingestione(session)
+
+                async def avanzamento(fatti: int, totale: int, messaggio: str) -> None:
+                    await annota(
+                        int(fatti * 100 / totale) if totale else 0,
+                        messaggio, sempre=True,
+                    )
+
+                esito = await ingestione.ingerisci(
+                    kb, file, lingua=parametri.get("lingua"),
+                    avanzamento=avanzamento,
+                )
+                await session.commit()
+        finally:
+            from ..knowledge.archivio import archivio_caricamenti
+
+            archivio = archivio_caricamenti()
+            for voce in file:
+                archivio.elimina(voce.get("riferimento", ""))
+
+        if esito.documenti == 0 and esito.falliti:
+            # Nessun file è entrato: è un fallimento, non un successo vuoto.
+            # Il motivo del primo basta a capire, gli altri stanno nell'esito.
+            nome, motivo = esito.falliti[0]["nome"], esito.falliti[0]["motivo"]
+            raise BuildFallita(
+                f"nessun documento aggiunto: {nome} — {motivo}"
+                + (f" (e altri {len(esito.falliti) - 1})" if len(esito.falliti) > 1 else "")
+            )
+        return EsitoBuild(artifact_path=None, meta=esito.to_dict())
+
     async def _chiudi(self, build_id, *, esito=None, errore: Optional[str] = None) -> None:
         async with get_session_factory()() as session:
             repo = BuildRepository(session)
@@ -286,9 +362,10 @@ class WorkerBuild:
 async def avvia(worker_id: str, *, solo_digestione: bool = False) -> int:
     """Avvia il consumatore.
 
-    Con un acceleratore prende qualunque lavoro; senza, **solo le
-    digestioni** — quelle interrogano un modello ma non addestrano nulla, e un
-    provider remoto va bene quanto uno locale.
+    Con un acceleratore prende qualunque lavoro; senza, **solo digestioni e
+    ingestioni** — interrogano un modello o leggono file, e non addestrano
+    nulla. Senza acceleratore il worker legge soltanto la loro coda: gli
+    addestramenti non li vede nemmeno.
 
     Il controllo è qui e non solo nell'API: un worker senza acceleratore che
     prendesse addestramenti li farebbe fallire uno dopo l'altro, svuotando la
@@ -309,7 +386,10 @@ async def avvia(worker_id: str, *, solo_digestione: bool = False) -> int:
     # capacita': i comandi bloccanti vogliono un timeout di lettura che
     # sopravviva all'attesa.
     coda = CodaBuild.per_consumatore()
-    worker = WorkerBuild(worker_id, coda=coda)
+    worker = WorkerBuild(
+        worker_id, coda=coda,
+        code=(CODA_SENZA_ACCELERATORE,) if solo_digestione else TUTTE_LE_CODE,
+    )
 
     for segnale in (signal.SIGINT, getattr(signal, "SIGTERM", signal.SIGINT)):
         try:
@@ -320,7 +400,9 @@ async def avvia(worker_id: str, *, solo_digestione: bool = False) -> int:
             signal.signal(segnale, lambda *_: worker.ferma())
 
     if solo_digestione:
-        logger.info("Consumatore avviato su %s: solo digestioni", worker_id)
+        logger.info(
+            "Consumatore avviato su %s: solo digestioni e ingestioni", worker_id,
+        )
     else:
         logger.info(
             "Consumatore avviato su %s (%s, %d MB)",

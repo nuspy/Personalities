@@ -1,16 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   avviaDigestione,
   elencoBasi,
   passaggiDi,
-  seguiLavoro,
   statoDigestione,
   type PassaggioEtichettato,
   type StatoDigestione,
 } from "@/lib/api";
-import { useAzione, useDati, useToken } from "@/lib/usa";
+import { useAzione, useDati } from "@/lib/usa";
+import { Avanzamento } from "../avanzamento";
 import comuni from "../comuni.module.css";
 import stili from "./digestione.module.css";
 
@@ -175,12 +175,6 @@ function Barre({ valori }: { valori: Record<string, number> }) {
 
 /* ---- avvio del lavoro ---- */
 
-interface Riga {
-  id: number;
-  progress: number;
-  message: string;
-  level: string;
-}
 
 function Avvio({
   kbId,
@@ -191,49 +185,13 @@ function Avvio({
   daFare: number;
   alTermine: () => void;
 }) {
-  const token = useToken();
   const { esegui, inCorso, errore } = useAzione();
   const [chi, setChi] = useState("");
   const [rifai, setRifai] = useState(false);
   const [lavoro, setLavoro] = useState<string | null>(null);
-  const [righe, setRighe] = useState<Riga[]>([]);
-  const [finito, setFinito] = useState<string | null>(null);
-  const coda = useRef<HTMLUListElement>(null);
+  const [finito, setFinito] = useState(false);
 
-  /* Il flusso si segue finché la pagina è aperta, e si chiude quando non lo è
-   * più: una digestione dura ore, e una connessione lasciata appesa a un job
-   * che nessuno guarda resta aperta fino al timeout del proxy. */
-  useEffect(() => {
-    if (!lavoro || !token) return;
-
-    const smetti = seguiLavoro(token, lavoro, (evento, dato) => {
-      if (evento === "progress") {
-        setRighe((prima) => [
-          ...prima.slice(-199),
-          {
-            id: Number(dato.id),
-            progress: Number(dato.progress ?? 0),
-            message: String(dato.message ?? ""),
-            level: String(dato.level ?? "info"),
-          },
-        ]);
-      } else if (evento === "done") {
-        setFinito(String(dato.status ?? "conclusa"));
-        alTermine();
-      } else if (evento === "errore" || evento === "timeout") {
-        setFinito(String(dato.message ?? "flusso interrotto"));
-      }
-    });
-
-    return smetti;
-  }, [lavoro, token, alTermine]);
-
-  useEffect(() => {
-    coda.current?.scrollTo({ top: coda.current.scrollHeight });
-  }, [righe]);
-
-  const ultima = righe[righe.length - 1];
-  const inMarcia = lavoro !== null && finito === null;
+  const inMarcia = lavoro !== null && !finito;
 
   return (
     <section className={comuni.riquadro}>
@@ -276,10 +234,11 @@ function Avvio({
           className={comuni.primaria}
           disabled={inCorso || inMarcia || (daFare === 0 && !rifai)}
           onClick={async () => {
-            setRighe([]);
-            setFinito(null);
             const esito = await esegui((t) => avviaDigestione(t, kbId, { chi, rifai }));
-            if (esito) setLavoro(esito.build_id);
+            if (esito) {
+              setFinito(false);
+              setLavoro(esito.build_id);
+            }
           }}
         >
           {inMarcia ? "In corso…" : "Digerisci"}
@@ -297,39 +256,15 @@ function Avvio({
       {errore && <p className={comuni.errore}>{errore}</p>}
 
       {lavoro && (
-        <div className={stili.avanzamento}>
-          <div
-            className={stili.avanzamentoTraccia}
-            role="progressbar"
-            aria-valuenow={ultima?.progress ?? 0}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="Avanzamento della digestione"
-          >
-            <div
-              className={stili.avanzamentoRiempimento}
-              style={{ width: `${ultima?.progress ?? 0}%` }}
-            />
-          </div>
-          <p className={stili.avanzamentoRiga}>
-            <span>{finito ?? ultima?.message ?? "In attesa di un worker…"}</span>
-            <span>{ultima?.progress ?? 0}%</span>
-          </p>
-
-          {righe.length > 0 && (
-            <ul className={stili.diario} ref={coda}>
-              {righe.map((r) => (
-                <li
-                  key={r.id}
-                  className={r.level === "errore" ? stili.diarioErrore : undefined}
-                >
-                  <span className={stili.diarioPercento}>{r.progress}%</span>
-                  <span>{r.message}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <Avanzamento
+          key={lavoro}
+          lavoro={lavoro}
+          etichetta="Avanzamento della digestione"
+          suFine={(build) => {
+            setFinito(true);
+            if (!build.interrotto) alTermine();
+          }}
+        />
       )}
     </section>
   );

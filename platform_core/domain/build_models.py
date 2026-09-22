@@ -29,11 +29,13 @@ from .base import Base, OwnedMixin, TimestampMixin
 
 #: Cosa si può costruire.
 #:
-#: `digestione` non produce un artefatto ma riusa questo meccanismo: è un
+#: `digestione` e `ingestione` non producono un artefatto ma riusano questo
+#: meccanismo — la prima analizza un corpus, la seconda vi aggiunge i file
+#: caricati dalla console. `digestione` è il caso originale: è un
 #: lavoro lungo, con avanzamento e un esito, esattamente come un
 #: addestramento. Duplicare coda, stati e avanzamento per farne un secondo
 #: significherebbe mantenerne due che si comportano allo stesso modo.
-TIPI_BUILD = ("lora", "finetune", "gguf", "merge", "digestione")
+TIPI_BUILD = ("lora", "finetune", "gguf", "merge", "digestione", "ingestione")
 
 #: Gli stati di un job, in ordine di avanzamento.
 #:
@@ -100,7 +102,7 @@ class Build(Base, TimestampMixin, OwnedMixin):
 
     __table_args__ = (
         CheckConstraint(
-            "kind in ('lora', 'finetune', 'gguf', 'merge', 'digestione')",
+            "kind in ('lora', 'finetune', 'gguf', 'merge', 'digestione', 'ingestione')",
             name="ck_builds_kind",
         ),
         CheckConstraint(

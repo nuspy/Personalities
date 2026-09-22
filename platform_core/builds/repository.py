@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.base import utcnow
 from ..domain.build_models import Build, BuildEvent, RuntimeBinding
+from .queue import TIPI_SENZA_ACCELERATORE
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,11 @@ class BuildRepository:
             params=params,
             owner_id=owner_id,
             status="in_coda",
-            message="In attesa di un worker con acceleratore",
+            message=(
+                "In attesa di un worker"
+                if kind in TIPI_SENZA_ACCELERATORE
+                else "In attesa di un worker con acceleratore"
+            ),
         )
         self._session.add(build)
         await self._session.flush()

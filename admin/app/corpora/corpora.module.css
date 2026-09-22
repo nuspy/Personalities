@@ -1,0 +1,108 @@
+/* Il caricamento dei documenti. */
+
+.zona,
+.zonaAttiva {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 1.1rem 1.2rem;
+  border: 1px dashed var(--filo);
+  border-radius: var(--raggio);
+  background: var(--superficie);
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+/* Trascinare è una comodità del mouse: il pulsante «Scegli i file» fa la
+ * stessa cosa da tastiera e da touch, e la zona cambia aspetto solo per dire
+ * «qui si può lasciare». */
+.zonaAttiva {
+  border-color: var(--rubrica);
+  background: color-mix(in srgb, var(--rubrica) 6%, var(--superficie));
+}
+
+.zonaTesto {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--inchiostro-tenue);
+  line-height: 1.5;
+}
+
+.formati {
+  font-family: var(--apparato), monospace;
+  font-size: 0.6875rem;
+  color: var(--inchiostro-debole);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.scelti {
+  list-style: none;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  border-top: 1px solid var(--filo-tenue);
+}
+
+.scelto {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--filo-tenue);
+  font-size: 0.875rem;
+}
+
+.sceltoNome {
+  overflow-wrap: anywhere;
+}
+
+.sceltoMisura {
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  color: var(--inchiostro-debole);
+}
+
+.sceltoProblema {
+  grid-column: 1 / -1;
+  color: var(--allarme);
+  font-size: 0.8125rem;
+  margin-top: -0.2rem;
+}
+
+.comandi {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.esito {
+  margin-top: 0.9rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.esito ul {
+  margin: 0.3rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.esitoProblema {
+  color: var(--allarme);
+}
+
+.esitoAvviso {
+  color: var(--inchiostro-tenue);
+}
+
+@media (max-width: 40rem) {
+  .scelto {
+    grid-template-columns: 1fr auto;
+  }
+
+  .sceltoMisura {
+    grid-column: 1;
+  }
+}
