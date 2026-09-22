@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import { useAzione, useDati } from "@/lib/usa";
 import { Avanzamento } from "../avanzamento";
+import { Motore } from "../motore";
 import comuni from "../comuni.module.css";
 import stili from "./digestione.module.css";
 
@@ -45,6 +46,10 @@ export default function Digestione() {
           </p>
         </div>
       </div>
+
+      {/* Prima della scelta del corpus: analizzare senza modello acceso
+          significa accodare un lavoro che fallirà. */}
+      <Motore />
 
       {erroreBasi && <p className={comuni.errore}>{erroreBasi}</p>}
 

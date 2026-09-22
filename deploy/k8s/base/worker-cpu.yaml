@@ -30,6 +30,47 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
+      initContainers:
+        # La chiave per accendere il motore locale, ricopiata con i permessi
+        # che ssh pretende. Un volume di Secret non può averli: i file
+        # arrivano di proprietà di root, e per farli leggere al processo
+        # devono essere leggibili dal gruppo — cosa che ssh rifiuta
+        # («Permissions 0440 are too open»). La copia nasce di proprietà
+        # dell'utente che poi la usa, e a 0400 nessun altro la vede.
+        #
+        # Senza il Secret il worker parte lo stesso e l'accensione
+        # automatica semplicemente non c'è: è la configurazione a decidere
+        # se esiste, non la presenza di un file.
+        - name: chiave-motore
+          image: persona-worker
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            # Fallisce solo se il Secret c'è e la copia non riesce: un Secret
+            # assente è una configurazione, un Secret illeggibile un difetto,
+            # e nasconderli entrambi dietro un `|| true` li renderebbe uguali.
+            - |
+              set -e
+              origine=/var/run/persona/motore-ssh
+              for nome in accendi spegni known_hosts; do
+                if [ -f "$origine/$nome" ]; then
+                  cp -L "$origine/$nome" "/etc/persona/ssh/$nome"
+                  chmod 400 "/etc/persona/ssh/$nome"
+                fi
+              done
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 64Mi}
+          volumeMounts:
+            - name: motore-ssh-segreto
+              mountPath: /var/run/persona/motore-ssh
+              readOnly: true
+            - name: motore-ssh
+              mountPath: /etc/persona/ssh
       containers:
         - name: lavori
           image: persona-worker
@@ -54,6 +95,9 @@ spec:
               mountPath: /var/lib/persona/caricamenti
             - name: modelli
               mountPath: /var/lib/persona/modelli
+            - name: motore-ssh
+              mountPath: /etc/persona/ssh
+              readOnly: true
         - name: battito
           image: persona-worker
           imagePullPolicy: IfNotPresent
@@ -79,3 +123,14 @@ spec:
         - name: modelli
           emptyDir:
             sizeLimit: 10Gi
+        # La chiave di accensione, come arriva: leggibile dal gruppo perché
+        # l'initContainer possa ricopiarla, e mai usata da lì.
+        - name: motore-ssh-segreto
+          secret:
+            secretName: motore-ssh
+            defaultMode: 0440
+            optional: true
+        - name: motore-ssh
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi

@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Callable, Optional, Sequence
 from ..capabilities.probe import probe
 from ..capabilities.registry import CapabilityRegistry, Feature
 from ..domain.session import dispose_engine, get_session_factory
+from ..llm.accensione import MotoreLocale, MotoreNonDisponibile, motore_da_impostazioni
 from .queue import CODA_SENZA_ACCELERATORE, TUTTE_LE_CODE, CodaBuild, JobBuild
 from .repository import BuildRepository
 from .runner import BuildFallita, EsitoBuild, Runner
@@ -68,6 +69,11 @@ def _digestione_predefinita(session: "AsyncSession") -> "DigestioneCorpus":
 #: embedding vero e senza Whisper.
 FabbricaIngestione = Callable[["AsyncSession"], "IngestioneCaricamenti"]
 
+#: I lavori che interrogano un modello, e che quindi pretendono il motore
+#: acceso. Gli addestramenti non ci sono: usano l'acceleratore direttamente,
+#: e un modello caricato accanto gli toglierebbe la memoria che serve loro.
+LAVORI_CON_MODELLO = ("digestione", "ingestione")
+
 
 def _ingestione_predefinita(session: "AsyncSession") -> "IngestioneCaricamenti":
     from ..knowledge.embedding import OpenAICompatibleEmbedder
@@ -86,6 +92,7 @@ class WorkerBuild:
         runner: Optional[Runner] = None,
         digestione: Optional[FabbricaDigestione] = None,
         ingestione: Optional[FabbricaIngestione] = None,
+        motore: Optional[MotoreLocale] = None,
         code: Sequence[str] = TUTTE_LE_CODE,
     ) -> None:
         self.worker_id = worker_id
@@ -94,6 +101,9 @@ class WorkerBuild:
         self._runner = runner or Runner()
         self._digestione = digestione or _digestione_predefinita
         self._ingestione = ingestione or _ingestione_predefinita
+        #: Chi accende il modello quando serve. Senza comandi configurati non
+        #: fa nulla, e il worker si comporta come prima.
+        self._motore = motore or motore_da_impostazioni(worker_id=worker_id)
         #: Le code che questo worker legge: senza acceleratore, solo quella
         #: dei lavori che non ne chiedono uno.
         self._code = tuple(code)
@@ -111,20 +121,35 @@ class WorkerBuild:
     async def gira(self) -> None:
         await self._recupera_orfani()
 
-        logger.info("Worker %s in ascolto sulla coda", self.worker_id)
-        while not self._fermarsi.is_set():
-            # In un thread: `brpoplpush` è bloccante, e nel loop fermerebbe
-            # tutto — compreso il battito che annuncia le capacità.
-            job = await asyncio.get_running_loop().run_in_executor(
-                None, lambda: self._coda.prendi(self.worker_id, code=self._code),
-            )
-            if job is None:
-                continue
+        # Accanto al consumo: pubblica lo stato del motore, raccoglie le
+        # richieste della console e lo spegne quando nessuno lo usa da
+        # abbastanza tempo. Va qui e non in un processo a parte perché è
+        # questo che sa quando un lavoro sta usando il modello.
+        sorveglianza = asyncio.ensure_future(self._motore.sorveglia(self._fermarsi))
 
-            try:
-                await self._esegui(job)
-            finally:
-                self._coda.completa(self.worker_id, job)
+        logger.info("Worker %s in ascolto sulla coda", self.worker_id)
+        try:
+            while not self._fermarsi.is_set():
+                # In un thread: `brpoplpush` è bloccante, e nel loop fermerebbe
+                # tutto — compreso il battito che annuncia le capacità.
+                job = await asyncio.get_running_loop().run_in_executor(
+                    None, lambda: self._coda.prendi(self.worker_id, code=self._code),
+                )
+                if job is None:
+                    continue
+
+                try:
+                    await self._esegui(job)
+                finally:
+                    self._coda.completa(self.worker_id, job)
+        finally:
+            self._fermarsi.set()
+            await sorveglianza
+            # Un modello acceso da noi si spegne uscendo: lasciarlo terrebbe
+            # occupata la memoria video per lavori che non arriveranno, e non
+            # resterebbe nessuno a spegnerlo allo scadere dell'inattività.
+            if self._motore.acceso_da_noi:
+                await self._motore.spegni(motivo="il worker si ferma")
 
         logger.info("Worker %s fermato", self.worker_id)
 
@@ -198,20 +223,36 @@ class WorkerBuild:
                 lambda: asyncio.ensure_future(annota(percentuale, messaggio))
             )
 
-        try:
+        async def lavora() -> EsitoBuild:
             if tipo == "digestione":
                 # La digestione non passa dal `Runner`: quello esegue codice
                 # sincrono in un thread perché gli stadi della pipeline sono
                 # sincroni, mentre qui è già tutto asincrono — e interroga il
                 # database, che da un altro thread non si può.
-                esito = await self._digerisci(build_id, parametri, annota)
-            elif tipo == "ingestione":
-                esito = await self._ingerisci(build_id, parametri, annota)
+                return await self._digerisci(build_id, parametri, annota)
+            if tipo == "ingestione":
+                return await self._ingerisci(build_id, parametri, annota)
+            return await self._runner.esegui(
+                build_id=build_id, kind=tipo, params=parametri,
+                avanzamento=avanzamento,
+            )
+
+        try:
+            if tipo in LAVORI_CON_MODELLO:
+                # Il motore resta acceso per tutta la durata del lavoro, e il
+                # timer di inattività non lo tocca: una digestione di tre ore
+                # non deve ritrovarsi il modello spento a metà.
+                async with self._motore.in_uso(motivo=f"{tipo} {build_id}"):
+                    esito = await lavora()
             else:
-                esito = await self._runner.esegui(
-                    build_id=build_id, kind=tipo, params=parametri,
-                    avanzamento=avanzamento,
-                )
+                esito = await lavora()
+        except MotoreNonDisponibile as exc:
+            # Distinto da un errore qualunque: il lavoro non è sbagliato, è il
+            # modello che non c'è. Chi legge deve sapere che rilanciarlo dopo
+            # aver acceso la macchina ha senso.
+            logger.error("Build %s: motore non disponibile — %s", build_id, exc)
+            await self._chiudi(build_id, errore=f"motore locale non disponibile: {exc}")
+            return
         except BuildFallita as exc:
             logger.error("Build %s fallita: %s", build_id, exc)
             await self._chiudi(build_id, errore=str(exc))
@@ -386,8 +427,16 @@ async def avvia(worker_id: str, *, solo_digestione: bool = False) -> int:
     # capacita': i comandi bloccanti vogliono un timeout di lettura che
     # sopravviva all'attesa.
     coda = CodaBuild.per_consumatore()
+    # Lo stato del motore si pubblica sullo stesso supporto del registro delle
+    # capacità: è lì che l'API va a leggere, e un secondo posto significherebbe
+    # una console che si configura per metà da una parte e per metà dall'altra.
+    from ..api.deps import get_key_value_store
+
     worker = WorkerBuild(
         worker_id, coda=coda,
+        motore=motore_da_impostazioni(
+            store=get_key_value_store(), worker_id=worker_id,
+        ),
         code=(CODA_SENZA_ACCELERATORE,) if solo_digestione else TUTTE_LE_CODE,
     )
 

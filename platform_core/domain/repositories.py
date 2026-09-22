@@ -136,7 +136,18 @@ class ConversationRepository:
             # `nulls_last`: una conversazione appena creata non ha ancora
             # messaggi, e senza questo finirebbe in cima o in fondo secondo il
             # capriccio del database.
-            .order_by(desc(Conversation.last_message_at).nulls_last())
+            #
+            # Gli altri due criteri sciolgono le parità. Due conversazioni
+            # possono avere lo stesso `last_message_at` — l'orologio non ha
+            # risoluzione infinita, e due messaggi scritti nello stesso
+            # millesimo capitano — e senza un ordine di riserva l'elenco si
+            # rimescola fra un caricamento e l'altro, davanti a chi cercava
+            # una riga dove l'aveva appena vista.
+            .order_by(
+                desc(Conversation.last_message_at).nulls_last(),
+                desc(Conversation.created_at),
+                desc(Conversation.id),
+            )
             .limit(limit)
             .offset(offset)
         )

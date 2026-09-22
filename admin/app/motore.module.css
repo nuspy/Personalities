@@ -1,0 +1,105 @@
+/* Il pannello del motore locale.
+ *
+ * Sta in cima alla digestione perché è lì che serve saperlo: un corpus da
+ * analizzare senza modello acceso è un lavoro che fallisce dopo essere stato
+ * accodato. Compatto di proposito — è apparato, non contenuto.
+ */
+
+.pannello {
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  background: var(--superficie-alta);
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.riga {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.titolo {
+  font-family: var(--interfaccia);
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--inchiostro);
+}
+
+.stato {
+  font-family: var(--apparato);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  color: var(--inchiostro-tenue);
+}
+
+.acceso {
+  color: var(--quiete);
+}
+
+.guasto {
+  color: var(--allarme);
+}
+
+.in_accensione,
+.in_spegnimento {
+  color: var(--rubrica);
+}
+
+.nota {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--inchiostro-debole);
+}
+
+.comandi {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.comando {
+  /* 48 px pieni: su un telefono un bersaglio più piccolo si manca, e qui si
+     manca accendendo una GPU o spegnendola sotto un lavoro. */
+  min-height: 48px;
+  min-width: 96px;
+  padding: 0 1.1rem;
+  font-family: var(--interfaccia);
+  font-size: 0.9rem;
+  color: var(--inchiostro);
+  background: var(--superficie);
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  cursor: pointer;
+}
+
+.comando:hover:not(:disabled) {
+  border-color: var(--inchiostro-tenue);
+}
+
+.comando:focus-visible {
+  outline: 2px solid var(--rubrica);
+  outline-offset: 2px;
+}
+
+.comando:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chi {
+  font-family: var(--apparato);
+  font-size: 0.72rem;
+  color: var(--inchiostro-debole);
+}
+
+.errore {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: var(--allarme);
+}

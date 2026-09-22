@@ -487,3 +487,111 @@ class TestTipoDiLavoro:
         from platform_core.builds.worker import avvia
 
         assert "solo_digestione" in inspect.signature(avvia).parameters
+
+
+class TestMotoreAcceso:
+    """La digestione interroga un modello: se non c'è, va acceso.
+
+    Il test che conta è il secondo. Una digestione dura ore, e il timer di
+    inattività gira mentre lavora: se il conteggio dei lavori in corso non
+    salisse, il motore verrebbe spento sotto un lavoro vivo — e il guasto
+    comparirebbe solo sui corpora grandi, cioè in produzione.
+    """
+
+    async def test_il_motore_si_accende_prima_di_digerire(
+        self, session, worker_sul_test, corpus,  # noqa: F811
+    ):
+        from platform_core.llm.accensione import MotoreLocale
+
+        lanciati: list[str] = []
+
+        async def esecutore(comando, attesa):
+            lanciati.append(comando)
+            return 0, ""
+
+        risposte = iter([False, True])
+
+        async def sonda():
+            return next(risposte, True)
+
+        build = await _accoda(session, corpus.id)
+        motore = MotoreLocale(
+            avvio="accendi-bonsai", arresto="spegni-bonsai",
+            esecutore=esecutore, sonda=sonda,
+        )
+        worker = WorkerBuild(
+            "prova", coda=CodaFinta(),
+            digestione=lambda s: DigestioneFinta(), motore=motore,
+        )
+        await worker._esegui(_job(build))
+
+        await session.refresh(build)
+        assert build.status == "riuscita"
+        assert lanciati == ["accendi-bonsai"]
+
+    async def test_resta_acceso_per_tutta_la_durata_del_lavoro(
+        self, session, worker_sul_test, corpus,  # noqa: F811
+    ):
+        from platform_core.llm.accensione import MotoreLocale
+
+        motore = MotoreLocale(
+            avvio="accendi", arresto="spegni",
+            esecutore=lambda c, a: _subito(),
+            sonda=_sempre_pronto,
+        )
+
+        class DigestioneCheGuarda(DigestioneFinta):
+            def __init__(self) -> None:
+                super().__init__()
+                self.in_corso_durante = None
+
+            async def digerisci(self, kb, **kwargs):
+                self.in_corso_durante = motore.stato().in_corso
+                return await super().digerisci(kb, **kwargs)
+
+        digestione = DigestioneCheGuarda()
+        build = await _accoda(session, corpus.id)
+        worker = WorkerBuild(
+            "prova", coda=CodaFinta(),
+            digestione=lambda s: digestione, motore=motore,
+        )
+        await worker._esegui(_job(build))
+
+        assert digestione.in_corso_durante == 1, (
+            "il lavoro non era contato: il timer di inattività avrebbe potuto "
+            "spegnere il motore a metà digestione"
+        )
+        assert motore.stato().in_corso == 0, "il conteggio non è tornato a zero"
+
+    async def test_senza_motore_il_lavoro_dichiara_perche(
+        self, session, worker_sul_test, corpus,  # noqa: F811
+    ):
+        """«Errore inatteso» manderebbe a cercare un difetto nel corpus. Il
+        corpus sta bene: è la macchina dei modelli che non risponde."""
+        from platform_core.llm.accensione import MotoreLocale
+
+        async def mai_pronto():
+            return False
+
+        motore = MotoreLocale(
+            avvio="accendi", arresto="spegni", attesa_s=0.0,
+            esecutore=lambda c, a: _subito(), sonda=mai_pronto,
+        )
+        build = await _accoda(session, corpus.id)
+        worker = WorkerBuild(
+            "prova", coda=CodaFinta(),
+            digestione=lambda s: DigestioneFinta(), motore=motore,
+        )
+        await worker._esegui(_job(build))
+
+        await session.refresh(build)
+        assert build.status == "fallita"
+        assert "motore locale non disponibile" in build.error
+
+
+async def _subito():
+    return 0, ""
+
+
+async def _sempre_pronto() -> bool:
+    return True

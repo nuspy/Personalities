@@ -116,6 +116,49 @@ Dopo il primo avvio: il catalogo dei piani (`python -m platform_core.tools.seed_
 in un pod dell'API) e il primo amministratore in Keycloak, che al primo accesso
 configura l'OTP.
 
+## Accensione del motore locale
+
+Un modello su GPU occupa la scheda anche mentre nessuno lo interroga. Il
+worker può accenderlo quando gli serve e spegnerlo dopo un po' che nessuno lo
+usa — **facoltativo**: senza configurazione il modello si gestisce a mano e
+tutto funziona come prima.
+
+Come è fatto, e perché così:
+
+- **i comandi stanno nei segreti, non nell'interfaccia.** Sono righe eseguite
+  dal worker con i suoi diritti: se una pagina potesse cambiarle, quella
+  pagina sarebbe esecuzione di codice arbitrario. La console può chiedere
+  «accendi» o «spegni»; non può dire *cosa* eseguire;
+- **accende il worker, non l'API.** Il processo esposto al pubblico non ha il
+  client SSH nella sua immagine e non raggiunge la macchina dei modelli:
+  deposita una parola in Redis, che il worker raccoglie entro pochi secondi;
+- **la chiave è a comando forzato.** Sulla macchina dei modelli,
+  `authorized_keys` porta una riga per l'accensione e una per lo spegnimento:
+
+  ```
+  command="powershell -ExecutionPolicy Bypass -File C:\\Projects\\bonsai_2_server\\start.ps1",
+  no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty,
+  from="<IP/32 di egress del cluster>" ssh-ed25519 AAAA… motore-accendi
+  ```
+
+  Qualunque cosa il worker mandi, quella chiave esegue solo quel comando, e
+  solo da quell'indirizzo. È ciò che rende accettabile tenere una chiave SSH
+  in un pod;
+- **le chiavi si generano al dispiegamento**, non prima: la riga `from=` vuole
+  l'indirizzo di egress vero dei pod, che dipende da come il tailnet è
+  attestato sul nodo e si legge sul cluster vivo. Le private restano nel
+  Secret `motore-ssh`, le pubbliche si installano sulla macchina dei modelli.
+
+Da compilare in `segreti.env` (vedi l'esempio): `PERSONA_LOCAL_ENGINE_START`,
+`_STOP`, `_HEALTH_URL`, `_WAIT_S`, `_IDLE_S`. Poi si scommenta il
+`secretGenerator` `motore-ssh` nell'overlay e si mettono i tre file in
+`overlays/produzione/motore-ssh/` (`accendi`, `spegni`, `known_hosts`).
+
+Lo stato si guarda dalla console, in *Digestione*: chi lo gestisce, da quanto
+è acceso, quanti lavori lo stanno usando — e lì stanno i due pulsanti. Uno
+stato che nessun worker aggiorna scade da solo e diventa «non gestito», invece
+di restare un «acceso» che nessuno smentisce.
+
 ## Crescere
 
 - **API e sito** scalano da soli sulla CPU (HPA). Sono senza stato.

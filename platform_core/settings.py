@@ -116,6 +116,29 @@ class Settings(BaseSettings):
     #: con KV-cache. Sono servizi remoti, non capacita' del cluster.
     local_engine_urls: List[str] = Field(default_factory=list)
 
+    # --- accensione a richiesta del motore locale ---------------------------
+    #: Un modello che occupa la memoria video la occupa anche mentre nessuno
+    #: lo interroga. Questi comandi lo accendono quando serve e lo spengono
+    #: quando non serve piu'. Vuoti: il motore si gestisce a mano, come in
+    #: sviluppo con il server gia' avviato.
+    #:
+    #: **Sono comandi eseguiti dal worker con i suoi diritti**, e per questo
+    #: arrivano solo di qui — dall'ambiente, in Kubernetes da un Secret. Non
+    #: esiste endpoint ne' pagina che li cambi: la console puo' chiedere
+    #: «accendi» o «spegni», non *cosa* eseguire. In produzione sono un `ssh`
+    #: verso la macchina dei modelli, con una chiave a comando forzato per
+    #: ciascuna delle due azioni: cosi' quella chiave non puo' fare altro.
+    local_engine_start: str = ""
+    local_engine_stop: str = ""
+    #: Dove si chiede al motore se e' pronto. Senza, l'accensione si fida
+    #: dell'uscita del comando — che dice se e' partito, non se risponde.
+    local_engine_health_url: str = ""
+    #: Quanto attendere che risponda dopo l'avvio. Un modello da ventisette
+    #: miliardi di parametri si carica in decine di secondi, non in tre.
+    local_engine_wait_s: float = 180.0
+    #: Dopo quanta inattivita' spegnerlo. Zero: mai.
+    local_engine_idle_s: float = 900.0
+
     #: Endpoint predefinito per la generazione. LM Studio, vLLM e OpenAI
     #: parlano lo stesso dialetto, quindi cambiare fornitore e' cambiare questo
     #: indirizzo — finche' la fase 1 non porta il registro di llmswitch.

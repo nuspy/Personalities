@@ -478,3 +478,60 @@ class TestTassonomia:
         categorie = (await admin.get("/admin/categories")).json()
 
         assert [c["slug"] for c in categorie] == ["free", "base", "gold"]
+
+
+class TestMotoreLocale:
+    """L'API chiede, non esegue.
+
+    È la proprietà che tiene i comandi — e la chiave SSH verso la macchina dei
+    modelli — fuori dal processo che riceve le richieste pubbliche. La console
+    può chiedere «accendi» o «spegni»: non può dire *cosa* eseguire.
+    """
+
+    @pytest.fixture
+    def con_registro(self, monkeypatch):
+        """Il supporto condiviso del test al posto di quello vero.
+
+        Sostituito sul modulo e non come dipendenza FastAPI: l'endpoint lo
+        chiama direttamente, perché non è la richiesta a deciderlo.
+        """
+        from platform_core.capabilities.registry import InMemoryStore
+
+        store = InMemoryStore()
+        monkeypatch.setattr(
+            "platform_core.api.deps.get_key_value_store", lambda: store,
+        )
+        return store
+
+    async def test_senza_worker_la_console_lo_dice(self, admin, con_registro):
+        risposta = await admin.get("/admin/motore")
+
+        assert risposta.status_code == 200
+        assert risposta.json()["stato"] == "non_gestito"
+        assert risposta.json()["motivo"], "uno stato senza motivo non si spiega"
+
+    async def test_la_richiesta_arriva_al_worker(self, admin, con_registro, session):
+        from platform_core.llm.accensione import CHIAVE_RICHIESTA
+
+        risposta = await admin.post("/admin/motore", json={"azione": "accendi"})
+
+        assert risposta.status_code == 202
+        assert con_registro.get(CHIAVE_RICHIESTA) == "accendi"
+
+    async def test_chi_accende_una_gpu_resta_scritto(
+        self, admin, con_registro, session,
+    ):
+        """Accendere costa corrente e toglie memoria a chi altro usa quella
+        macchina: è un'operazione di cui qualcuno risponde."""
+        from platform_core.domain.admin_repositories import RegistroAuditRepository
+
+        await admin.post("/admin/motore", json={"azione": "spegni"})
+
+        voci = await RegistroAuditRepository(session).recenti(azione="motore.spegni")
+        assert len(voci) == 1
+        assert voci[0].target_type == "motore"
+
+    async def test_un_azione_inventata_non_passa(self, admin, con_registro):
+        risposta = await admin.post("/admin/motore", json={"azione": "riavvia-tutto"})
+
+        assert risposta.status_code == 422

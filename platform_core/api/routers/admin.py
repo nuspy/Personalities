@@ -669,6 +669,63 @@ async def opzioni_di_realizzazione(
     }
 
 
+# --- motore locale ---------------------------------------------------------
+
+
+class ComandoMotore(BaseModel):
+    azione: str = Field(pattern=r"^(accendi|spegni)$")
+
+
+@router.get("/motore")
+def stato_motore() -> Dict[str, Any]:
+    """Cosa sta facendo il modello locale, secondo il worker che lo gestisce.
+
+    Lo stato lo pubblica il worker con una scadenza: se il worker muore, qui
+    si smette di dire «acceso» e si dice che nessuno lo sta gestendo. È la
+    differenza fra un'informazione e un ricordo.
+    """
+    from ...llm.accensione import stato_pubblicato
+    from ..deps import get_key_value_store
+
+    return stato_pubblicato(get_key_value_store()).to_dict()
+
+
+@router.post("/motore", status_code=status.HTTP_202_ACCEPTED)
+async def comanda_motore(
+    corpo: ComandoMotore, session: DbSession, ctx: Contesto,
+) -> Dict[str, Any]:
+    """Chiede al worker di accendere o spegnere il modello locale.
+
+    **202 e non 200**: l'API non esegue nulla: non ha i comandi, non
+    raggiunge la macchina dei modelli e non deve poterlo fare. Deposita una
+    parola che il worker raccoglie entro pochi secondi, e chi guarda la
+    console vede cambiare lo stato quando è cambiato davvero — non quando è
+    stato chiesto.
+
+    Accendere una GPU costa corrente e toglie memoria a chi altro usa quella
+    macchina: resta nel registro chi l'ha chiesto e da dove.
+    """
+    from ...domain.repositories import AuditRepository
+    from ...llm.accensione import chiedi_accensione, stato_pubblicato
+    from ..deps import get_key_value_store
+
+    store = get_key_value_store()
+    chiedi_accensione(store, corpo.azione)
+
+    await AuditRepository(session).record(
+        action=f"motore.{corpo.azione}",
+        actor_id=ctx.attore.id,
+        target_type="motore",
+        target_id="locale",
+        after={"azione": corpo.azione},
+        ip=ctx.ip,
+        correlation_id=ctx.correlation_id,
+    )
+    await session.commit()
+
+    return {"richiesta": corpo.azione, "stato": stato_pubblicato(store).to_dict()}
+
+
 # --- registro --------------------------------------------------------------
 
 

@@ -679,3 +679,31 @@ export const provaPrompt = (
   },
 ) =>
   chiamata<EsitoPlayground>(t, "/admin/playground", { method: "POST", body: JSON.stringify(corpo) });
+
+/* --- il motore locale ------------------------------------------------- */
+
+export interface StatoMotore {
+  stato:
+    | "non_gestito"
+    | "spento"
+    | "in_accensione"
+    | "acceso"
+    | "in_spegnimento"
+    | "guasto";
+  da: number;
+  ultimo_uso: number;
+  in_corso: number;
+  inattivita_s: number;
+  motivo: string;
+  worker_id: string;
+}
+
+export const statoMotore = (t: string) => chiamata<StatoMotore>(t, "/admin/motore");
+
+/* Chiede; non esegue. Il worker raccoglie la richiesta entro pochi secondi,
+ * e lo stato cambia quando è cambiato davvero — non quando è stato chiesto. */
+export const comandaMotore = (t: string, azione: "accendi" | "spegni") =>
+  chiamata<{ richiesta: string; stato: StatoMotore }>(t, "/admin/motore", {
+    method: "POST",
+    body: JSON.stringify({ azione }),
+  });

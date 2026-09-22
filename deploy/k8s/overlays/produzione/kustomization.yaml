@@ -61,6 +61,17 @@ secretGenerator:
   # I segnaposto del realm di Keycloak. Vedi keycloak.env.example.
   - name: keycloak-realm-segreti
     envs: [keycloak.env]
+  # La chiave con cui il worker accende il motore locale. Da scommentare
+  # quando le chiavi esistono: si generano al dispiegamento, perché la riga
+  # `from=` in authorized_keys vuole l'indirizzo di egress vero del cluster —
+  # che prima che il cluster esista non si può sapere. Senza questo Secret il
+  # worker parte lo stesso e l'accensione automatica non c'è (il volume è
+  # `optional`). Vedi il README, «Accensione del motore locale».
+  # - name: motore-ssh
+  #   files:
+  #     - accendi=motore-ssh/accendi
+  #     - spegni=motore-ssh/spegni
+  #     - known_hosts=motore-ssh/known_hosts
 
 patches:
   # I file caricati fra API e worker: ReadWriteMany su uno storage che lo

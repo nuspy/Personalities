@@ -57,8 +57,15 @@ FROM api AS worker
 USER root
 # ffmpeg per estrarre l'audio dai video; il resto delle dipendenze di sistema
 # lo portano già le ruote di PyMuPDF e lxml.
+#
+# openssh-client serve all'accensione a richiesta del motore locale: il
+# worker apre una connessione verso la macchina dei modelli con una chiave a
+# comando forzato — che su quella macchina può eseguire soltanto «accendi» o
+# «spegni», qualunque cosa le si mandi. Sta solo qui e non nell'immagine
+# dell'API: il processo che riceve le richieste pubbliche non deve nemmeno
+# avere un client SSH da usare.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg openssh-client \
     && rm -rf /var/lib/apt/lists/*
 # Whisper per la trascrizione: pesa centinaia di megabyte fra ctranslate2 e
 # onnxruntime, ed è per questo che sta qui e non nell'API.
