@@ -1,0 +1,182 @@
+/* Gli avatar: schede, perché qui conta l'anteprima.
+ *
+ * Una tabella andrebbe bene per righe di dati; qui la cosa che si guarda è
+ * un ritratto, e una miniatura dentro una cella la rende sempre troppo
+ * piccola per dire qualcosa.
+ */
+
+.griglia {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.scheda {
+  display: flex;
+  gap: 0.9rem;
+  padding: 0.9rem;
+  border: 1px solid var(--filo-tenue);
+  border-radius: var(--raggio);
+  background: var(--superficie);
+}
+
+.anteprima {
+  flex: 0 0 auto;
+  width: 4.5rem;
+  height: 4.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--filo-tenue);
+  border-radius: var(--raggio);
+  background: var(--superficie-alta);
+  overflow: hidden;
+}
+
+.miniatura {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.simbolo {
+  font-size: 1.4rem;
+  color: var(--inchiostro-debole);
+}
+
+.corpo {
+  min-width: 0;
+  flex: 1;
+}
+
+.nome {
+  font-family: var(--display), serif;
+  font-size: 1.1rem;
+  font-weight: 400;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.tipo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.45rem 0 0;
+}
+
+.etichettaTipo,
+.labiale,
+.senzaLabiale {
+  font-family: var(--apparato), monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  padding: 0.12rem 0.4rem;
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  color: var(--inchiostro-tenue);
+  white-space: nowrap;
+}
+
+.labiale {
+  border-color: var(--rubrica-tenue);
+  color: var(--rubrica);
+}
+
+.senzaLabiale {
+  color: var(--inchiostro-debole);
+}
+
+.descrizione {
+  font-size: 0.8125rem;
+  color: var(--inchiostro-tenue);
+  line-height: 1.45;
+  margin: 0.5rem 0 0;
+}
+
+.avviso {
+  font-size: 0.8125rem;
+  color: var(--allarme);
+  line-height: 1.45;
+  margin: 0.5rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.azioni {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+}
+
+/* ---- modulo ---- */
+
+.riga {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.riga > * {
+  flex: 1 1 14rem;
+}
+
+/* ---- le quindici pose ---- */
+
+.pose {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 0.45rem;
+  margin: 0.6rem 0 1rem;
+}
+
+.posa {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.forma,
+.formaRichiesta {
+  flex: 0 0 2.6rem;
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  text-align: right;
+  color: var(--inchiostro-debole);
+}
+
+/* La bocca a riposo è obbligatoria e si distingue: è quella che, se manca,
+   lascia il volto congelato a ogni pausa. */
+.formaRichiesta {
+  composes: forma;
+  color: var(--rubrica);
+  font-weight: 600;
+}
+
+.ingressoPosa {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 0.5rem;
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  background: var(--superficie);
+  color: var(--inchiostro);
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+}
+
+.ingressoPosa:focus-visible {
+  outline: 2px solid var(--rubrica-tenue);
+  outline-offset: 1px;
+}
+
+@media (max-width: 30rem) {
+  .scheda {
+    flex-direction: column;
+  }
+
+  .anteprima {
+    width: 100%;
+    height: 7rem;
+  }
+}

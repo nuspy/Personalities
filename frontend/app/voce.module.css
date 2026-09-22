@@ -137,3 +137,39 @@
     height: 4px;
   }
 }
+
+/* ---- volto 3D ---- */
+
+.ritratto3d {
+  position: relative;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--filo-tenue);
+  background: var(--superficie-alta);
+}
+
+.ritratto3d canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Finché three.js e il modello non sono scesi, il riquadro pulsa piano invece
+ * di restare vuoto: un cerchio grigio fermo sembra un'immagine rotta. */
+.ritratto3d[data-stato="carico"] {
+  animation: attesaVolto 1.4s ease-in-out infinite;
+}
+
+@keyframes attesaVolto {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ritratto3d[data-stato="carico"] {
+    animation: none;
+    opacity: 0.7;
+  }
+}

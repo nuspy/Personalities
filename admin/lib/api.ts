@@ -96,6 +96,7 @@ export interface Personalita {
   description: string | null;
   status: "draft" | "published" | "archived";
   current_version_id: string | null;
+  avatar_id: string | null;
   tipi: Tipo[];
   categoria: { id: number; name: string } | null;
 }
@@ -410,6 +411,66 @@ export function seguiLavoro(
 
   return () => freno.abort();
 }
+
+/* ---- avatar ---- */
+
+export interface Avatar {
+  id: string;
+  slug: string;
+  name: string;
+  kind: "immagine" | "video" | "modello";
+  description: string | null;
+  config: Record<string, unknown>;
+  descrittore?: {
+    tipo: string;
+    uri: string;
+    labiale: boolean;
+    pose: Record<string, string>;
+    extra: Record<string, unknown>;
+  };
+}
+
+export const elencoAvatar = (t: string) =>
+  chiamata<Avatar[]>(t, "/admin/avatars");
+
+export const creaAvatar = (
+  t: string,
+  corpo: {
+    slug: string;
+    name: string;
+    kind: string;
+    config: Record<string, unknown>;
+    description?: string;
+  },
+) =>
+  chiamata<Avatar>(t, "/admin/avatars", {
+    method: "POST",
+    body: JSON.stringify(corpo),
+  });
+
+export const modificaAvatar = (
+  t: string,
+  id: string,
+  corpo: Record<string, unknown>,
+) =>
+  chiamata<Avatar>(t, `/admin/avatars/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(corpo),
+  });
+
+export const eliminaAvatar = (t: string, id: string) =>
+  chiamata<{ eliminato: boolean; personalita_senza_volto: number }>(
+    t,
+    `/admin/avatars/${id}`,
+    { method: "DELETE" },
+  );
+
+export const volgiAvatar = (t: string, personalityId: string, avatarId: string | null) =>
+  chiamata<{ personality_id: string; avatar_id: string | null }>(
+    t,
+    `/admin/personalities/${personalityId}/avatar`,
+    { method: "PUT", body: JSON.stringify({ avatar_id: avatarId }) },
+  );
 
 export const provaRecupero = (
   t: string,

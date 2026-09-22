@@ -84,3 +84,17 @@
   line-height: 1.45;
   max-width: 64ch;
 }
+
+/* Un selettore con il suo pulsante: su schermo stretto vanno uno sotto
+ * l'altro invece di schiacciare il menu fino a troncarne i nomi. */
+.rigaAzione {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.rigaAzione > select {
+  flex: 1 1 16rem;
+  min-width: 0;
+}

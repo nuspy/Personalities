@@ -23,6 +23,7 @@ import {
   type Voce,
   type Volto,
 } from "@/lib/api";
+import { Volto3D } from "./volto3d";
 import stili from "./voce.module.css";
 
 /** Dove siamo nella riproduzione. */
@@ -286,22 +287,8 @@ export function Ritratto({
   }
 
   if (volto.tipo === "modello") {
-    /* Il rendering 3D con i morph target richiede three.js e un file da
-     * provare: finché non c'è, si mostra il poster invece di un riquadro
-     * vuoto. Il descrittore dice `labiale: true` e il client non lo onora —
-     * ed è meglio dirlo qui che animare niente in silenzio. */
-    const poster = (volto.extra?.poster as string | undefined) ?? "";
-    /* `<img>` e non `next/image`: l'indirizzo è di un host arbitrario scelto
-     * da chi amministra, e l'ottimizzatore pretenderebbe di elencarli tutti in
-     * configurazione — un avatar aggiunto dalla console smetterebbe di
-     * comparire finché qualcuno non ridispiega il frontend. */
-    return poster ? (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img className={stili.ritratto} src={poster} alt={volto.nome} />
-    ) : (
-      <div className={stili.ritrattoAssente} role="img" aria-label={volto.nome}>
-        {volto.nome.slice(0, 1)}
-      </div>
+    return (
+      <Volto3D volto={volto} forma={istante.forma} parlando={istante.parlando} />
     );
   }
 

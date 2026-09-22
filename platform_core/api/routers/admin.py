@@ -149,6 +149,7 @@ def _personalita_json(p: Personality) -> Dict[str, Any]:
         "description": p.description,
         "status": p.status,
         "current_version_id": str(p.current_version_id) if p.current_version_id else None,
+        "avatar_id": str(p.avatar_id) if p.avatar_id else None,
         "tipi": [{"id": t.id, "slug": t.slug, "name": t.name} for t in p.types],
         "categoria": (
             {"id": p.commercial_category.id, "name": p.commercial_category.name}

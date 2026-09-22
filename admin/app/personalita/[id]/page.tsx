@@ -16,6 +16,8 @@ import {
   type Opzione,
   type PersonalitaDettaglio,
   type Versione,
+  elencoAvatar,
+  volgiAvatar,
 } from "@/lib/api";
 import { useAzione, useDati } from "@/lib/usa";
 import stili from "../../comuni.module.css";
@@ -56,6 +58,7 @@ export default function Dettaglio({
       <Versioni personalita={dati} ricarica={ricarica} />
       <Corpora personalita={dati} ricarica={ricarica} />
       <Tipi personalita={dati} ricarica={ricarica} />
+      <Volto personalita={dati} ricarica={ricarica} />
       <Realizzazione />
       <Archiviazione personalita={dati} ricarica={ricarica} />
     </>
@@ -443,6 +446,78 @@ function Tipi({
 }
 
 /* ---- realizzazione ---- */
+
+/* ---- volto ---- */
+
+/* Quale avatar indossa questa voce.
+ *
+ * Qui e non nella pagina degli avatar: la domanda che ci si pone guardando
+ * una personalità è «che faccia ha?», e dover andare altrove per rispondere
+ * — o per cambiarla — spezzerebbe il lavoro in due posti. Nessun volto è uno
+ * stato normale: la voce si mostra col suo nome. */
+function Volto({
+  personalita,
+  ricarica,
+}: {
+  personalita: PersonalitaDettaglio;
+  ricarica: () => void;
+}) {
+  const { dati: avatar } = useDati(elencoAvatar);
+  const { esegui, inCorso, errore } = useAzione();
+  const [scelto, setScelto] = useState<string>(personalita.avatar_id ?? "");
+
+  const attuale = avatar?.find((a) => a.id === personalita.avatar_id);
+
+  return (
+    <section className={stili.riquadro}>
+      <h2 className={stili.riquadroTitolo}>Volto</h2>
+      <p className={stili.riquadroNota}>
+        {attuale
+          ? `Indossa «${attuale.name}» (${attuale.kind}${
+              attuale.kind === "modello" ? ", con labiale" : ", senza labiale"
+            }).`
+          : "Nessun volto: la personalità si mostra col suo nome."}
+      </p>
+
+      {avatar && avatar.length === 0 ? (
+        <p className={stili.riquadroNota}>
+          Non ci sono avatar. Si creano nella pagina{" "}
+          <Link href="/avatar">Avatar</Link>.
+        </p>
+      ) : (
+        <div className={propri.rigaAzione}>
+          <select
+            className={stili.ingresso}
+            value={scelto}
+            onChange={(e) => setScelto(e.target.value)}
+            aria-label="Avatar"
+          >
+            <option value="">Nessun volto</option>
+            {(avatar ?? []).map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} — {a.kind}
+              </option>
+            ))}
+          </select>
+          <button
+            className={stili.primaria}
+            disabled={inCorso || scelto === (personalita.avatar_id ?? "")}
+            onClick={async () => {
+              const fatto = await esegui((t) =>
+                volgiAvatar(t, personalita.id, scelto || null),
+              );
+              if (fatto) ricarica();
+            }}
+          >
+            {inCorso ? "Salvo…" : "Applica"}
+          </button>
+        </div>
+      )}
+
+      {errore && <p className={stili.errore}>{errore}</p>}
+    </section>
+  );
+}
 
 function Realizzazione() {
   const { dati } = useDati(opzioniRealizzazione);
