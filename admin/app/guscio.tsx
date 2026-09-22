@@ -8,6 +8,7 @@ import stili from "./guscio.module.css";
 const SEZIONI = [
   { href: "/", etichetta: "Personalità" },
   { href: "/corpora", etichetta: "Corpora" },
+  { href: "/digestione", etichetta: "Digestione" },
   { href: "/recupero", etichetta: "Recupero" },
   { href: "/registro", etichetta: "Registro" },
 ];

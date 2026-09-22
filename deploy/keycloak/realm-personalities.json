@@ -101,7 +101,19 @@
       "publicClient": true,
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": true,
-      "serviceAccountsEnabled": false
+      "serviceAccountsEnabled": false,
+      "protocolMappers": [
+        {
+          "name": "audience-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "persona-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
     }
   ],
   "users": [

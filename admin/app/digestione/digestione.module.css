@@ -1,0 +1,412 @@
+/* La digestione: un pannello di controllo sopra, i passaggi sotto.
+ *
+ * Il passaggio è l'unità che conta. Un'aggregazione dice che il corpus è
+ * distribuito in un certo modo; solo leggendo un passaggio accanto alla sua
+ * etichetta si sa se quella classificazione sia giusta — ed è la domanda che
+ * ci si pone quando il recupero sbaglia.
+ */
+
+/* ---- scelta del corpus ---- */
+
+.scelta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.corpus {
+  min-height: 48px;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  background: transparent;
+  color: var(--inchiostro-tenue);
+  font-family: var(--interfaccia), sans-serif;
+  font-size: 0.875rem;
+  text-align: left;
+  line-height: 1.3;
+}
+
+.corpus:hover {
+  border-color: var(--inchiostro-debole);
+  color: var(--inchiostro);
+}
+
+.corpusAttivo {
+  composes: corpus;
+  border-color: var(--inchiostro);
+  background: var(--inchiostro);
+  color: var(--carta);
+}
+
+.corpusMisura {
+  display: block;
+  font-family: var(--apparato), monospace;
+  font-size: 0.6875rem;
+  opacity: 0.7;
+  margin-top: 0.15rem;
+}
+
+/* ---- stato ---- */
+
+.cruscotto {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1px;
+  background: var(--filo-tenue);
+  border: 1px solid var(--filo-tenue);
+  border-radius: var(--raggio);
+  margin-bottom: 1.25rem;
+}
+
+.misura {
+  background: var(--superficie);
+  padding: 0.8rem 1rem;
+}
+
+.misuraValore {
+  font-family: var(--display), serif;
+  font-size: 1.75rem;
+  line-height: 1;
+  display: block;
+}
+
+.misuraEtichetta {
+  font-family: var(--apparato), monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--inchiostro-debole);
+  margin-top: 0.35rem;
+  display: block;
+}
+
+.misuraAllarme .misuraValore {
+  color: var(--allarme);
+}
+
+/* ---- distribuzioni ---- */
+
+.distribuzioni {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.barre {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.6rem 0 0;
+}
+
+.barra {
+  display: grid;
+  grid-template-columns: 9rem 1fr 3rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8125rem;
+}
+
+.barraNome {
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  color: var(--inchiostro-tenue);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barraTraccia {
+  height: 6px;
+  background: var(--filo-tenue);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.barraRiempimento {
+  height: 100%;
+  background: var(--inchiostro-tenue);
+}
+
+.barraScarto .barraRiempimento {
+  background: var(--rubrica-tenue);
+}
+
+.barraQuanti {
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  text-align: right;
+  color: var(--inchiostro-debole);
+}
+
+/* ---- avvio e avanzamento ---- */
+
+.avvio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.avvio > .campo {
+  flex: 1 1 18rem;
+}
+
+.spunta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  font-size: 0.875rem;
+  color: var(--inchiostro-tenue);
+}
+
+.spunta input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--inchiostro);
+}
+
+.avanzamento {
+  margin-top: 1rem;
+}
+
+.avanzamentoTraccia {
+  height: 4px;
+  background: var(--filo-tenue);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.avanzamentoRiempimento {
+  height: 100%;
+  background: var(--rubrica);
+  transition: width 0.3s ease-out;
+}
+
+.avanzamentoRiga {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  color: var(--inchiostro-tenue);
+  margin-top: 0.5rem;
+}
+
+.diario {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0.6rem 0.8rem;
+  max-height: 11rem;
+  overflow-y: auto;
+  background: var(--superficie-alta);
+  border: 1px solid var(--filo-tenue);
+  border-radius: var(--raggio);
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.diario li {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.diarioPercento {
+  color: var(--inchiostro-debole);
+  min-width: 2.5rem;
+  text-align: right;
+}
+
+.diarioErrore {
+  color: var(--allarme);
+}
+
+/* ---- filtri ---- */
+
+.filtri {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 1.5rem 0 1rem;
+}
+
+.filtro {
+  min-height: 44px;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--filo);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--inchiostro-tenue);
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+}
+
+.filtro:hover {
+  border-color: var(--inchiostro-debole);
+  color: var(--inchiostro);
+}
+
+.filtroAttivo {
+  composes: filtro;
+  border-color: var(--inchiostro);
+  background: var(--inchiostro);
+  color: var(--carta);
+}
+
+.filtroScarto {
+  composes: filtro;
+  color: var(--allarme);
+}
+
+.filtroScartoAttivo {
+  composes: filtro;
+  border-color: var(--allarme);
+  background: var(--allarme);
+  color: var(--carta);
+}
+
+.conteggio {
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  color: var(--inchiostro-debole);
+  margin-left: auto;
+}
+
+/* ---- passaggi ---- */
+
+.passaggi {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.passaggio {
+  border: 1px solid var(--filo-tenue);
+  border-left: 3px solid var(--filo);
+  border-radius: var(--raggio);
+  background: var(--superficie);
+  padding: 0.9rem 1rem;
+}
+
+.passaggioScartato {
+  composes: passaggio;
+  border-left-color: var(--allarme);
+  background: var(--superficie-alta);
+}
+
+.passaggioTestata {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.fonte {
+  font-family: var(--apparato), monospace;
+  font-size: 0.6875rem;
+  color: var(--inchiostro-debole);
+  margin-right: auto;
+  overflow-wrap: anywhere;
+}
+
+.segno {
+  font-family: var(--apparato), monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--filo);
+  border-radius: var(--raggio);
+  color: var(--inchiostro-tenue);
+  white-space: nowrap;
+}
+
+.segnoCategoria {
+  composes: segno;
+  border-color: var(--rubrica-tenue);
+  color: var(--rubrica);
+}
+
+.segnoScarto {
+  composes: segno;
+  border-color: var(--allarme);
+  background: var(--allarme);
+  color: var(--carta);
+}
+
+.sintesi {
+  font-family: var(--lettura), serif;
+  font-size: 0.875rem;
+  font-style: italic;
+  color: var(--inchiostro-tenue);
+  margin: 0 0 0.6rem;
+  line-height: 1.5;
+}
+
+.testo {
+  font-family: var(--lettura), serif;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  margin: 0;
+  overflow-wrap: break-word;
+}
+
+.tolto {
+  background: color-mix(in srgb, var(--allarme) 12%, transparent);
+  color: var(--allarme);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  padding: 0 0.1em;
+}
+
+.messo {
+  background: color-mix(in srgb, var(--quiete) 14%, transparent);
+  color: var(--quiete);
+  padding: 0 0.1em;
+}
+
+.motivo {
+  font-size: 0.8125rem;
+  color: var(--allarme);
+  margin: 0.6rem 0 0;
+  line-height: 1.5;
+}
+
+.punteggi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.7rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--filo-tenue);
+}
+
+.punteggio {
+  font-family: var(--apparato), monospace;
+  font-size: 0.6875rem;
+  color: var(--inchiostro-debole);
+  border: 1px solid var(--filo-tenue);
+  border-radius: var(--raggio);
+  padding: 0.1rem 0.4rem;
+}
+
+.ancora {
+  margin: 1rem auto 0;
+  display: block;
+}
+
+@media (max-width: 30rem) {
+  .barra {
+    grid-template-columns: 7rem 1fr 2.5rem;
+  }
+
+  .cruscotto {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

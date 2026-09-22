@@ -120,6 +120,15 @@ class DigestioneCorpus:
 
         # Passata 2: classificazione, a lotti e salvando man mano.
         fatti = esito.scartati_a_vista
+        #: L'ultima percentuale annunciata.
+        #:
+        #: L'avanzamento si emette solo quando questa cambia: su cinquemila
+        #: passaggi a quattro per lotto sarebbero milleduecento righe, tutte
+        #: conservate, per far muovere una barra che ha cento posizioni. Il
+        #: filtro sta qui e non in chi ascolta perche' solo qui si sa quale
+        #: messaggio e' ripetitivo: un avviso di passata esce una volta sola
+        #: e non va mai perso.
+        percentuale_annunciata = -1
         for inizio in range(0, len(restanti), self._per_lotto):
             lotto = restanti[inizio : inizio + self._per_lotto]
             etichette = await self._digestore.classifica(
@@ -142,7 +151,9 @@ class DigestioneCorpus:
             await self._session.commit()
 
             fatti += len(lotto)
-            if avanzamento:
+            percentuale = int(fatti * 100 / totale) if totale else 100
+            if avanzamento and percentuale != percentuale_annunciata:
+                percentuale_annunciata = percentuale
                 avanzamento(fatti, totale, f"{fatti} di {totale} passaggi")
 
         esito.esaminati = totale

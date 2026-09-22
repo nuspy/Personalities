@@ -121,6 +121,36 @@ export interface Base {
   } | null;
 }
 
+export interface StatoDigestione {
+  kb: { id: string; slug: string; name: string };
+  passaggi: {
+    totale: number;
+    etichettati: number;
+    da_fare: number;
+    scartati: number;
+    ripuliti: number;
+  };
+  per_categoria: Record<string, number>;
+  per_provenienza: Record<string, number>;
+}
+
+export interface PassaggioEtichettato {
+  id: string;
+  ordinale: number;
+  documento: string;
+  sezione: string | null;
+  testo: string;
+  testo_originale: string | null;
+  categoria: string | null;
+  categorie: Record<string, number>;
+  provenienza: string | null;
+  qualita: number | null;
+  sintesi: string;
+  da_togliere: string;
+  scartato: boolean;
+  motivo_scarto: string | null;
+}
+
 export interface Documento {
   id: string;
   title: string;
@@ -271,6 +301,115 @@ export const eliminaDocumento = (t: string, kbId: string, docId: string) =>
     `/admin/knowledge-bases/${kbId}/documents/${docId}`,
     { method: "DELETE" },
   );
+
+export const statoDigestione = (t: string, kbId: string) =>
+  chiamata<StatoDigestione>(t, `/admin/knowledge-bases/${kbId}/digestion`);
+
+export const passaggiDi = (
+  t: string,
+  kbId: string,
+  filtri: {
+    categoria?: string;
+    provenienza?: string;
+    solo_scartati?: boolean;
+    solo_ripuliti?: boolean;
+    limite?: number;
+    offset?: number;
+  } = {},
+) => {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(filtri)) {
+    if (v !== undefined && v !== "" && v !== false) q.set(k, String(v));
+  }
+  return chiamata<{ totale: number; passaggi: PassaggioEtichettato[] }>(
+    t,
+    `/admin/knowledge-bases/${kbId}/chunks?${q}`,
+  );
+};
+
+export const avviaDigestione = (
+  t: string,
+  kbId: string,
+  corpo: { chi: string; rifai: boolean },
+) =>
+  chiamata<{ build_id: string; passaggi_da_fare: number; stato: string }>(
+    t,
+    `/admin/knowledge-bases/${kbId}/digestion`,
+    { method: "POST", body: JSON.stringify(corpo) },
+  );
+
+export const statoBuild = (t: string, buildId: string) =>
+  chiamata<{
+    id: string;
+    status: string;
+    progress: number;
+    message: string | null;
+    error: string | null;
+  }>(t, `/admin/builds/${buildId}`);
+
+/** Segue l'avanzamento di un lavoro finché non finisce.
+ *
+ * `fetch` e non `EventSource`: quello non sa mandare l'header
+ * `Authorization`, e un token in querystring finisce nei log del proxy.
+ *
+ * Restituisce la funzione per smettere: chi lascia la pagina deve poter
+ * chiudere il flusso, o il browser tiene aperta una connessione per venti
+ * minuti a un job che nessuno sta più guardando.
+ */
+export function seguiLavoro(
+  token: string,
+  buildId: string,
+  su: (evento: string, dato: Record<string, unknown>) => void,
+): () => void {
+  const freno = new AbortController();
+
+  (async () => {
+    const risposta = await fetch(`${API}/admin/builds/${buildId}/events`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: freno.signal,
+    });
+    if (!risposta.ok || !risposta.body) {
+      su("errore", { message: "Non riesco a seguire l'avanzamento." });
+      return;
+    }
+
+    const lettore = risposta.body.getReader();
+    const decoder = new TextDecoder();
+    let resto = "";
+
+    while (true) {
+      const { done, value } = await lettore.read();
+      if (done) break;
+
+      resto += decoder.decode(value, { stream: true });
+      // Un blocco SSE finisce con una riga vuota; quello che resta dopo
+      // l'ultima è un messaggio a metà, e va tenuto per il giro dopo.
+      const blocchi = resto.split("\n\n");
+      resto = blocchi.pop() ?? "";
+
+      for (const blocco of blocchi) {
+        let evento = "message";
+        let dato = "";
+        for (const riga of blocco.split("\n")) {
+          if (riga.startsWith("event:")) evento = riga.slice(6).trim();
+          else if (riga.startsWith("data:")) dato += riga.slice(5).trim();
+        }
+        if (!dato) continue;
+        try {
+          su(evento, JSON.parse(dato));
+        } catch {
+          /* un blocco illeggibile non deve fermare il flusso */
+        }
+      }
+    }
+  })().catch((e: unknown) => {
+    if ((e as Error)?.name !== "AbortError") {
+      su("errore", { message: "Il flusso dell'avanzamento si è interrotto." });
+    }
+  });
+
+  return () => freno.abort();
+}
 
 export const provaRecupero = (
   t: string,

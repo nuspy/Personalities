@@ -28,7 +28,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base, OwnedMixin, TimestampMixin
 
 #: Cosa si può costruire.
-TIPI_BUILD = ("lora", "finetune", "gguf", "merge")
+#:
+#: `digestione` non produce un artefatto ma riusa questo meccanismo: è un
+#: lavoro lungo, con avanzamento e un esito, esattamente come un
+#: addestramento. Duplicare coda, stati e avanzamento per farne un secondo
+#: significherebbe mantenerne due che si comportano allo stesso modo.
+TIPI_BUILD = ("lora", "finetune", "gguf", "merge", "digestione")
 
 #: Gli stati di un job, in ordine di avanzamento.
 #:
@@ -46,8 +51,11 @@ class Build(Base, TimestampMixin, OwnedMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
 
-    personality_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("personalities.id", ondelete="CASCADE"), nullable=False,
+    #: Nullo per le digestioni: quel lavoro riguarda un corpus e non una
+    #: voce, e inventare una personalità fittizia per riempire la colonna
+    #: renderebbe il dato bugiardo invece che mancante.
+    personality_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("personalities.id", ondelete="CASCADE"),
     )
     #: La versione da cui si parte: il profilo stilistico e il corpus di quella
     #: versione sono ciò che l'addestramento consuma. Senza, ripetere una build
@@ -92,7 +100,8 @@ class Build(Base, TimestampMixin, OwnedMixin):
 
     __table_args__ = (
         CheckConstraint(
-            "kind in ('lora', 'finetune', 'gguf', 'merge')", name="ck_builds_kind",
+            "kind in ('lora', 'finetune', 'gguf', 'merge', 'digestione')",
+            name="ck_builds_kind",
         ),
         CheckConstraint(
             "status in ('in_coda', 'in_corso', 'riuscita', 'fallita', 'annullata')",

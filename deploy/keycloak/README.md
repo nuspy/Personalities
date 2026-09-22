@@ -39,3 +39,11 @@ L'import avviene solo alla prima creazione del database interno. Per rileggerlo:
     docker compose down keycloak
     docker volume rm personalities_keycloak_data 2>/dev/null || true
     docker compose up -d keycloak
+
+## `persona-test` e il pubblico del token
+
+Il client dei test automatici porta un mappatore di *audience* verso
+`persona-api`. Senza, l'API rifiuta i suoi token con «token emesso per
+['persona-test']»: la verifica del pubblico è voluta — un token buono per
+un client non deve valere per un altro — ma un client di prova che non
+riesce a parlare con ciò che deve provare non serve a niente.
