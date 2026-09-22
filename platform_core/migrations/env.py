@@ -30,6 +30,7 @@ from platform_core.domain import models  # noqa: E402,F401  (registra le tabelle
 from platform_core.domain import knowledge_models  # noqa: E402,F401
 from platform_core.domain import build_models  # noqa: E402,F401
 from platform_core.domain import memory_models  # noqa: E402,F401
+from platform_core.domain import billing_models  # noqa: E402,F401
 from platform_core.settings import get_settings  # noqa: E402
 
 config = context.config

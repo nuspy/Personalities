@@ -7,7 +7,9 @@ import {
   elencaPersonalita,
   ErroreApi,
   leggiCapacita,
+  leggiConto,
   type CapacitaPiattaforma,
+  type Conto,
   type Consumo,
   type Fonte,
   type Personalita,
@@ -119,6 +121,32 @@ function Accesso({ errore }: { errore?: string }) {
   );
 }
 
+/* Il saldo, accanto ai comandi.
+ *
+ * Un numero e basta: la pagina è di lettura, e un pannello di fatturazione
+ * accanto a una conversazione è fuori posto. Serve a una cosa sola — che
+ * «servono 3 crediti, ne hai 0» non arrivi come una sorpresa — e per questo
+ * il numero si vede *prima* di mandare il messaggio, non dopo il rifiuto.
+ *
+ * Scompare del tutto quando l'installazione non fa pagare, invece di mostrare
+ * uno zero che sembrerebbe un blocco. */
+function Saldo({ conto }: { conto: Conto }) {
+  const scarso = conto.saldo > 0 && conto.saldo <= 5;
+
+  return (
+    <span
+      className={scarso ? stili.saldoScarso : stili.saldo}
+      title={
+        conto.abbonamento
+          ? `Piano ${conto.abbonamento.piano}`
+          : "Accesso gratuito"
+      }
+    >
+      {conto.saldo} {conto.saldo === 1 ? "credito" : "crediti"}
+    </span>
+  );
+}
+
 /* Cosa sa fare questa installazione, in una riga.
  *
  * Il motivo per cui una funzione manca è informazione preziosa, ma non qui:
@@ -160,6 +188,7 @@ function Conversazione() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [personalita, setPersonalita] = useState<Personalita[]>([]);
   const [scelta, setScelta] = useState<string | null>(null);
+  const [conto, setConto] = useState<Conto | null>(null);
 
   const fondo = useRef<HTMLDivElement>(null);
   const campo = useRef<HTMLTextAreaElement>(null);
@@ -175,6 +204,23 @@ function Conversazione() {
       })
       .catch(() => setPersonalita([]));
   }, []);
+
+  const token = auth.user?.access_token ?? null;
+
+  /* Il conto si rilegge a ogni turno finito: una risposta consuma crediti, e
+   * un saldo fermo al valore di dieci minuti fa è peggio di nessun saldo —
+   * dice un numero sbagliato con la stessa sicurezza di uno giusto.
+   *
+   * Un'installazione senza catalogo non fa pagare: lì il conto non si mostra
+   * affatto, invece di esibire uno zero che sembrerebbe un blocco. */
+  const aggiornaConto = useCallback(() => {
+    if (!token) return;
+    leggiConto(token)
+      .then((c) => setConto(c.abbonamento || c.saldo > 0 ? c : null))
+      .catch(() => setConto(null));
+  }, [token]);
+
+  useEffect(aggiornaConto, [aggiornaConto]);
 
   useEffect(() => {
     fondo.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -264,8 +310,9 @@ function Conversazione() {
       setPensa(false);
       interruttore.current = null;
       campo.current?.focus();
+      aggiornaConto();
     }
-  }, [auth, bozza, conversationId, inCorso, scelta]);
+  }, [auth, aggiornaConto, bozza, conversationId, inCorso, scelta]);
 
   const nomeScelta =
     personalita.find((p) => p.slug === scelta)?.display_name ?? null;
@@ -296,6 +343,8 @@ function Conversazione() {
             ))}
           </select>
         )}
+
+        {conto && <Saldo conto={conto} />}
 
         <button
           className={stili.azioneTestata}

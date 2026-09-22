@@ -98,7 +98,16 @@ async def current_user(
 ) -> User:
     """L'utente del database, allineato al token."""
     try:
-        return await UserRepository(session).ensure(principal)
+        utente = await UserRepository(session).ensure(principal)
+        if getattr(utente, "appena_creato", False):
+            # Il piano gratuito si apre qui e non dentro `ensure`: il dominio
+            # degli utenti non deve sapere che esiste una tariffa, o le due
+            # cose non si possono più cambiare separatamente.
+            from ..billing.plans import GestoreAbbonamenti
+
+            await GestoreAbbonamenti(session).apri_piano_base(utente.id)
+            await session.commit()
+        return utente
     except PermissionError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=str(exc),

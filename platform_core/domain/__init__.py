@@ -11,9 +11,12 @@ Python esegue questo file prima di qualunque sottomodulo del package, quindi
 anche `from platform_core.domain.models import User` porta con sé tutto il
 resto: il vincolo è soddisfatto da qualunque strada si entri.
 """
-from . import base, build_models, knowledge_models, memory_models, models  # noqa: F401
+from . import (  # noqa: F401
+    base, billing_models, build_models, knowledge_models, memory_models, models,
+)
 
 from .base import Base, OwnedMixin, TimestampMixin, utcnow
+from .billing_models import CreditEntry, Plan, Subscription
 from .build_models import Build, BuildEvent, RuntimeBinding
 from .knowledge_models import (
     DIMENSIONI_EMBEDDING, AnswerTrace, Chunk, ChunkVector, Document,
@@ -32,6 +35,7 @@ __all__ = [
     "Chunk",
     "ChunkVector",
     "Conversation",
+    "CreditEntry",
     "Document",
     "KnowledgeBase",
     "Memory",
@@ -39,9 +43,11 @@ __all__ = [
     "Message",
     "OwnedMixin",
     "Personality",
+    "Plan",
     "PersonalityKnowledgeBase",
     "PersonalityVersion",
     "RuntimeBinding",
+    "Subscription",
     "TimestampMixin",
     "User",
     "utcnow",

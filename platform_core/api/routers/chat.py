@@ -23,12 +23,17 @@ import uuid
 from typing import Annotated, Any, AsyncIterator, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ...auth.dependencies import CurrentUser, DbSession
+from ...billing.credits import CreditiInsufficienti, RegistroCrediti
+from ...billing.entitlements import puo_parlare_con
+from ...billing.plans import GestoreAbbonamenti
+from ...billing.tariffe import costo_risposta
 from ...api.deps import get_embedder, get_guardrail, get_llm_provider
-from ...domain.knowledge_models import PersonalityVersion
+from ...domain.knowledge_models import CommercialCategory, PersonalityVersion
 from ...domain.models import Conversation
 from ...domain.repositories import (
     ConversationRepository, PersonalityRepository, TraceRepository,
@@ -177,6 +182,37 @@ async def chat(
             kb_ids = await personalita_repo.corpora_di(versione.personality_id)
             slug_personalita = await personalita_repo.slug_di(versione.personality_id)
 
+    # -- diritto e moneta ---------------------------------------------------
+    #
+    # Due controlli e non uno, in quest'ordine, perché si risolvono in modi
+    # diversi: chi non ha il diritto deve cambiare piano, chi non ha crediti
+    # deve aspettare il rinnovo o comprarne. Un solo «non puoi» li
+    # confonderebbe, e chi lo riceve non saprebbe cosa fare.
+    costo = 0
+    if versione is not None:
+        gestore = GestoreAbbonamenti(session)
+        categoria = await _categoria_di(session, versione)
+        verdetto = puo_parlare_con(await gestore.diritti_di(user.id), categoria)
+        if not verdetto:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=verdetto.motivo,
+                headers={"X-Serve-Piano": verdetto.serve} if verdetto.serve else None,
+            )
+
+        # Solo dove un catalogo esiste: senza piani in tabella questa
+        # installazione non fa pagare, e addebitare comunque la renderebbe
+        # muta per una tabella vuota.
+        if await gestore.tariffe_in_vigore():
+            costo = costo_risposta(versione.llm_config)
+        else:
+            logger.warning(
+                "Nessun piano attivo in catalogo: la risposta di «%s» non "
+                "viene addebitata. Esegui `python -m "
+                "platform_core.tools.seed_piani`.",
+                slug_personalita,
+            )
+
     correlation_id = current_correlation_id()
 
     storico = await repo.messages(user, conversazione.id, limit=TURNI_DI_CONTESTO)
@@ -193,6 +229,34 @@ async def chat(
     # Il turno dell'utente si salva **prima** di generare: se il modello
     # fallisce, la sua domanda non deve andare perduta insieme all'errore.
     await session.commit()
+
+    # I crediti si tolgono **prima** di generare, non dopo.
+    #
+    # Dopo sembrerebbe più giusto — si paga ciò che si è ricevuto — e
+    # lascerebbe scoperta la porta: con il solo controllo in testa, dieci
+    # richieste concorrenti dello stesso utente passano tutte, e il saldo
+    # finisce sotto zero. Il consumo prende un lock sulla riga dell'utente e
+    # verifica e sottrae nello stesso istante; ciò che non riesce si rimborsa,
+    # con una riga propria, perché resti scritto che è stato tentato.
+    if costo > 0:
+        try:
+            await RegistroCrediti(session).consuma(
+                user.id, costo,
+                conversation_id=conversazione.id,
+                note=slug_personalita,
+            )
+            await session.commit()
+        except CreditiInsufficienti as exc:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=(
+                    f"Serve {exc.servono} credito per questa risposta, "
+                    f"ne hai {exc.disponibili}."
+                    if exc.servono == 1
+                    else f"Servono {exc.servono} crediti per questa risposta, "
+                         f"ne hai {exc.disponibili}."
+                ),
+            ) from exc
 
     conversazione_id = conversazione.id
     versione_id = versione.id if versione else None
@@ -311,6 +375,20 @@ async def chat(
             yield sse("error", {"message": "Errore interno.", "recoverable": False})
 
         risposta = "".join(pezzi)
+
+        # Niente testo, niente addebito. Il rimborso è una riga in più e non
+        # la cancellazione del consumo: chi legge il registro deve vedere che
+        # una risposta è stata tentata, è fallita ed è stata restituita.
+        # Cancellando, il saldo tornerebbe giusto senza spiegare nulla.
+        if costo > 0 and not risposta.strip():
+            async with session_factory() as rimborso:
+                await RegistroCrediti(rimborso).rimborsa(
+                    user.id, costo,
+                    conversation_id=conversazione_id,
+                    note="risposta non prodotta",
+                )
+                await rimborso.commit()
+
         passaggi = turno.recupero.scelti if (turno and turno.recupero) else []
         forniti = [p.etichetta for p in passaggi]
 
@@ -385,6 +463,22 @@ async def chat(
             # log dell'applicazione, che lo riveli.
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+async def _categoria_di(session, versione: PersonalityVersion) -> Optional[str]:
+    """Lo slug della categoria commerciale della personalità, se ne ha una.
+
+    Caricata qui e non insieme alla versione perché serve solo a questo
+    controllo: una `join` in più su ogni turno di chi parla con una voce
+    gratuita si pagherebbe per niente.
+    """
+    from ...domain.knowledge_models import Personality
+
+    return await session.scalar(
+        select(CommercialCategory.slug)
+        .join(Personality, Personality.commercial_category_id == CommercialCategory.id)
+        .where(Personality.id == versione.personality_id)
     )
 
 

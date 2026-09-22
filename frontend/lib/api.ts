@@ -143,12 +143,24 @@ export async function* conversa(
   });
 
   if (!risposta.ok || !risposta.body) {
+    /* Il motivo lo manda il servizio, e per 402 e 403 è l'unica cosa utile:
+     * «servono 3 crediti, ne hai 0» e «il tuo piano non comprende questa
+     * voce» si risolvono in modi diversi, e tradurli entrambi in «il
+     * servizio non ha risposto» trasforma un limite previsto in un guasto
+     * apparente — con l'utente che ricarica invece di abbonarsi. */
+    let motivo: string | undefined;
+    try {
+      motivo = (await risposta.json())?.detail;
+    } catch {
+      /* il corpo non era JSON: restano i codici */
+    }
+
     throw new ErroreApi(
       risposta.status === 401
         ? "La sessione è scaduta."
         : risposta.status === 404
           ? "Questa conversazione non esiste più."
-          : "Il servizio non ha risposto.",
+          : (motivo ?? "Il servizio non ha risposto."),
       risposta.status,
     );
   }
@@ -226,4 +238,28 @@ function interpreta(blocco: string): EventoChat | null {
     default:
       return null;
   }
+}
+
+/* ---- conto ---- */
+
+export interface Conto {
+  abbonamento: {
+    piano: string;
+    stato: string;
+    periodo_fine: string;
+    disdetto_il: string | null;
+  } | null;
+  diritti: {
+    piano: string;
+    categorie: string[];
+    voce: boolean;
+    predefiniti: boolean;
+  };
+  saldo: number;
+}
+
+export async function leggiConto(token: string): Promise<Conto> {
+  return leggi(
+    await fetch(`${API}/me/billing`, { headers: intestazioni(token) }),
+  );
 }

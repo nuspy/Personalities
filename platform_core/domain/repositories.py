@@ -74,7 +74,14 @@ class UserRepository:
             self._session.add(utente)
             await self._session.flush()
             logger.info("Primo accesso di %s: utente creato", principal.subject[:8])
+            # Marcato e non dedotto da `created_at`: chi chiama deve poter
+            # fare qualcosa *una volta sola* alla nascita dell'account —
+            # aprire il piano gratuito — e «creato da poco» non è la stessa
+            # cosa di «creato adesso da me».
+            utente.appena_creato = True
             return utente
+
+        utente.appena_creato = False
 
         if utente.deleted_at is not None:
             # Riattivare in silenzio nasconderebbe che l'account era stato

@@ -56,6 +56,15 @@ class User(Base, TimestampMixin):
 
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
+    #: Vero solo sull'istanza che ha appena creato la riga. Non è una colonna:
+    #: vive quanto l'oggetto in memoria, e serve a chi deve fare qualcosa una
+    #: volta sola alla nascita dell'account — aprire il piano gratuito.
+    #:
+    #: Dedurlo da `created_at` non funzionerebbe: «creato da poco» e «creato
+    #: adesso da me» sono cose diverse, e due richieste dello stesso utente
+    #: nello stesso secondo lo aprirebbero due volte.
+    appena_creato: bool = False
+
     conversations: Mapped[List["Conversation"]] = relationship(
         back_populates="owner", cascade="all, delete-orphan",
     )

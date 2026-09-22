@@ -510,3 +510,28 @@
 .motivo {
   color: var(--inchiostro-tenue);
 }
+
+/* ---- saldo ---- */
+
+.saldo {
+  font-family: var(--apparato), monospace;
+  font-size: 0.75rem;
+  color: var(--inchiostro-debole);
+  white-space: nowrap;
+  padding: 0 0.3rem;
+}
+
+/* Il rosso solo quando sta per finire: usarlo sempre lo renderebbe rumore, e
+ * quando serve davvero non lo vedrebbe più nessuno. */
+.saldoScarso {
+  composes: saldo;
+  color: var(--rubrica);
+}
+
+@media (max-width: 30rem) {
+  /* Su schermo stretto la testata ha già marchio, scelta e due comandi: il
+   * saldo è la cosa che si può leggere altrove. */
+  .saldo {
+    display: none;
+  }
+}
