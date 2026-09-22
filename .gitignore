@@ -12,4 +12,11 @@ __pycache__/
 /historical_persona_pipeline/cache/
 # Cache di compilazione generata da Unsloth all'avvio dell'addestramento.
 /unsloth_compiled_cache/
-builds/
+# Gli artefatti delle realizzazioni: pesi, adapter, GGUF.
+#
+# Ancorata alla radice. Senza la barra iniziale la regola vale a ogni
+# livello e si porta via anche `platform_core/builds/` — il pacchetto del
+# worker, coda e runner compresi — che sparirebbe dalla versione senza che
+# nessuno se ne accorga finché non serve ripristinarlo.
+/builds/
+/artifacts/
