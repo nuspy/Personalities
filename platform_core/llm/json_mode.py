@@ -38,6 +38,17 @@ TENTATIVI_DI_BUDGET = 3
 #: modello che ragiona all'infinito farebbe crescere il costo a ogni tentativo.
 TETTO_TOKEN = 32_768
 
+#: Da dove parte la scala dei budget per un modello che ragiona.
+#:
+#: La scala triplica a ogni tentativo, e con un modello che ragiona ogni
+#: tentativo è una generazione intera: partire da duemila token significa
+#: pagare due giri prima di arrivare dove si sarebbe potuti partire. Misurato
+#: sul giudice con Bonsai 2 27B: circa due minuti per tentativo. Si applica
+#: solo ai modelli che lo dichiarano (`ragiona` nella loro configurazione),
+#: perché su un modello che non ragiona sarebbe solo un tetto più alto e
+#: inutile.
+BUDGET_RAGIONAMENTO = 6144
+
 _RECINTO = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
 
 #: I dialetti, nell'ordine in cui si provano. `None` significa nessun vincolo

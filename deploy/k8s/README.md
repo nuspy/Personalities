@@ -139,6 +139,12 @@ non rifiuta nulla — può essere assegnato a qualunque compito, comprese le
 risposte agli utenti: decide l'amministratore. La console lo dichiara accanto
 al nome, e il registro di audit conserva chi ha scelto cosa.
 
+Un modello che ragiona prima di rispondere va dichiarato con `ragiona: true`.
+Non è cosmesi: il ragionamento consuma il budget di uscita insieme alla
+risposta, e se lo esaurisce il modello restituisce **testo vuoto**. La scala
+dei tentativi riparte triplicando, e su un modello lento ogni tentativo è un
+minuto speso per scoprire una cosa che la configurazione poteva dire.
+
 ## Recupero assistito
 
 Il compito *recupero* non serve a ogni risposta: si accende per personalità,

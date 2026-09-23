@@ -103,6 +103,12 @@ class ModelloConfigurato(BaseModel):
     #: Vuoto: il primo modello che il server ha caricato.
     model: str = ""
     api_key: str = ""
+    #: Il modello ragiona prima di rispondere, e il ragionamento consuma il
+    #: budget di uscita insieme alla risposta. Dichiararlo evita due tentativi
+    #: sprecati a ogni chiamata strutturata: la scala dei budget parte da un
+    #: valore che copre il ragionamento invece di scoprirlo fallendo — e su
+    #: un modello lento ogni tentativo è un minuto.
+    ragiona: bool = False
     #: Che motore c'è dietro l'indirizzo: decide la `ContextStrategy`, cioè
     #: se il prefisso stabile viene riusato dalla KV-cache, scontato dal
     #: prompt caching del fornitore, o niente. Vuoto lo deduce dall'indirizzo;
@@ -262,6 +268,7 @@ class RegistroModelli:
                 api_key=configurazione.api_key or None,
                 default_model=configurazione.model,
                 motore=configurazione.motore or None,
+                ragiona=configurazione.ragiona,
                 # Il nome finisce nelle tracce: senza, due modelli diversi
                 # comparirebbero entrambi come «openai-compatibile» e non si
                 # saprebbe quale ha prodotto quale risposta.

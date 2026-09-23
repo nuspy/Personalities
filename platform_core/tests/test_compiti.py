@@ -199,3 +199,43 @@ class TestCompatibilita:
             assert [m.nome for m in modelli_da_impostazioni()] == ["solo-questo"]
         finally:
             get_settings.cache_clear()
+
+
+class TestModelliCheRagionano:
+    """Il budget di uscita deve coprire anche il ragionamento.
+
+    Un modello che ragiona spende il budget prima di scrivere: se lo
+    esaurisce, restituisce testo vuoto e la scala dei tentativi riparte
+    triplicando. Su un modello lento ogni tentativo è un minuto, e sono
+    minuti spesi per scoprire una cosa che la configurazione poteva dire.
+    """
+
+    def test_la_dichiarazione_arriva_al_fornitore(self):
+        registro = RegistroModelli([
+            ModelloConfigurato(
+                nome=PREDEFINITO, base_url="http://127.0.0.1:9/v1", ragiona=True,
+            ),
+        ])
+
+        assert registro.per(Compito.GIUDIZIO).ragiona is True
+
+    def test_per_difetto_non_ragiona(self):
+        """Alzare il pavimento a chi non ragiona sarebbe solo un tetto più
+        alto e inutile."""
+        registro = RegistroModelli(elenco())
+
+        assert registro.per(Compito.GIUDIZIO).ragiona is False
+
+    def test_il_pavimento_vale_solo_per_chi_ragiona(self):
+        from platform_core.llm.json_mode import BUDGET_RAGIONAMENTO
+        from platform_core.llm.openai_compatible import OpenAICompatibleProvider
+
+        ragionante = OpenAICompatibleProvider(
+            base_url="http://127.0.0.1:9/v1", ragiona=True,
+        )
+        diretto = OpenAICompatibleProvider(base_url="http://127.0.0.1:9/v1")
+
+        assert ragionante.ragiona and not diretto.ragiona
+        assert BUDGET_RAGIONAMENTO > 2048, (
+            "il pavimento deve stare sopra il budget con cui il giudice chiama"
+        )

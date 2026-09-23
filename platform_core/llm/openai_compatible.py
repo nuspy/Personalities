@@ -33,7 +33,8 @@ from .base import (
     TruncatedResponse, Usage,
 )
 from .json_mode import (
-    DIALETTI, TENTATIVI_DI_BUDGET, TETTO_TOKEN, e_rifiuto_del_formato,
+    BUDGET_RAGIONAMENTO, DIALETTI, TENTATIVI_DI_BUDGET, TETTO_TOKEN,
+    e_rifiuto_del_formato,
     estrai_json, formato_risposta, prossimo_budget,
 )
 
@@ -50,6 +51,7 @@ class OpenAICompatibleProvider(LLMProvider):
         settings: Optional[Settings] = None,
         name: str = "openai-compatibile",
         motore: Optional[str] = None,
+        ragiona: bool = False,
     ) -> None:
         settings = settings or get_settings()
         self.name = name
@@ -58,6 +60,9 @@ class OpenAICompatibleProvider(LLMProvider):
         #: e quali campi di cache si possono mandare. Dichiarato qui perché è
         #: il fornitore a sapere a cosa sta parlando.
         self.motore = motore or riconosci_motore(self._base_url, settings.llm_engine)
+        #: Se il modello ragiona prima di rispondere. Alza il pavimento del
+        #: budget nelle richieste strutturate: vedi `BUDGET_RAGIONAMENTO`.
+        self.ragiona = ragiona
         self._api_key = api_key or settings.llm_api_key
         self._default_model = default_model or settings.llm_model
         self._timeout = timeout or settings.llm_stream_timeout
@@ -220,6 +225,9 @@ class OpenAICompatibleProvider(LLMProvider):
         self, request: GenerationRequest, dialetto: Optional[str]
     ) -> str:
         """Riprova con più spazio quando il modello esaurisce il budget."""
+        # Il pavimento per i modelli che ragionano lo applica il costruttore
+        # del payload, che vale anche per le chiamate non strutturate: qui
+        # basta la scala dei tentativi.
         budget = request.max_tokens or 4096
 
         for tentativo in range(TENTATIVI_DI_BUDGET + 1):
@@ -279,7 +287,20 @@ class OpenAICompatibleProvider(LLMProvider):
             "stream": stream,
         }
         if request.max_tokens:
-            payload["max_tokens"] = request.max_tokens
+            # Il pavimento per i modelli che ragionano vale su **ogni**
+            # chiamata, non solo su quelle strutturate: il ragionamento
+            # consuma lo stesso budget della risposta, e un tetto calcolato
+            # sulla lunghezza attesa della risposta lo esaurisce prima che
+            # il modello cominci a scrivere. Il risultato è testo vuoto —
+            # nessun errore — e chi chiama ricade sul suo ripiego a ogni
+            # tentativo, senza che nulla sembri rotto.
+            #
+            # È un tetto, non un obiettivo: chi ha finito si ferma, e su un
+            # modello che non ragiona la riga non fa nulla.
+            payload["max_tokens"] = (
+                max(request.max_tokens, BUDGET_RAGIONAMENTO)
+                if self.ragiona else request.max_tokens
+            )
         if request.stop:
             payload["stop"] = request.stop
         if stream:

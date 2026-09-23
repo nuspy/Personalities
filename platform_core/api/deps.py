@@ -10,7 +10,10 @@ from __future__ import annotations
 import logging
 from functools import lru_cache
 
+from fastapi import Depends
+
 from ..capabilities.registry import CapabilityRegistry, InMemoryStore, KeyValueStore
+from ..domain.session import get_db_session
 from ..settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -77,15 +80,24 @@ def get_registro_modelli():
     return RegistroModelli(modelli_da_impostazioni())
 
 
-def get_llm_provider():
+async def get_llm_provider(session=Depends(get_db_session)):
     """Il fornitore che risponde agli utenti.
 
     Resta con questo nome perche' e' quello che gli endpoint di chat
     chiedono, ed e' il compito piu' ovvio: «il modello», senza aggettivi, e'
     quello che parla.
+
+    **Rilegge le assegnazioni prima di scegliere**, e per questo vuole una
+    sessione. Senza, un processo appena avviato risolverebbe la prima
+    richiesta su un registro che il database non l'ha ancora letto, e quella
+    risposta uscirebbe dal modello predefinito invece che da quello
+    assegnato: un errore per ogni replica a ogni rilascio, silenzioso perche'
+    la risposta arriva comunque — dal modello sbagliato. Visto succedere
+    davvero, dopo un ricaricamento a caldo.
     """
     from ..llm.compiti import Compito
 
+    await aggiorna_assegnazioni(session)
     return get_registro_modelli().per(Compito.CONVERSAZIONE)
 
 

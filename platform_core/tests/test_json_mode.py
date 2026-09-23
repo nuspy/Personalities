@@ -190,3 +190,45 @@ def _richiesta(max_tokens: int = 500) -> GenerationRequest:
         messages=[Message(role="user", content="dammi un JSON")],
         max_tokens=max_tokens,
     )
+
+
+class TestBudgetDeiModelliCheRagionano:
+    """Il tetto di uscita deve coprire il ragionamento, su ogni chiamata.
+
+    Non solo su quelle strutturate: un modello che ragiona spende lo stesso
+    budget della risposta per pensarci, e un tetto calcolato sulla lunghezza
+    attesa della risposta lo esaurisce prima che cominci a scrivere. Il
+    risultato è testo vuoto — nessun errore — e chi chiama ricade sul proprio
+    ripiego a ogni tentativo senza che nulla sembri rotto. Misurato sulla
+    selezione dei passaggi con Bonsai 2 27B.
+    """
+
+    async def _tetto(self, *, ragiona: bool, chiesto: int) -> int:
+        from platform_core.llm.base import GenerationRequest, Message
+        from platform_core.llm.openai_compatible import OpenAICompatibleProvider
+
+        fornitore = OpenAICompatibleProvider(
+            base_url="http://127.0.0.1:9/v1", default_model="finto",
+            ragiona=ragiona,
+        )
+        payload = await fornitore._build_payload(
+            GenerationRequest(
+                messages=[Message(role="user", content="ciao")],
+                max_tokens=chiesto,
+            ),
+            stream=False,
+        )
+        return payload["max_tokens"]
+
+    async def test_chi_ragiona_riceve_il_pavimento(self):
+        from platform_core.llm.json_mode import BUDGET_RAGIONAMENTO
+
+        assert await self._tetto(ragiona=True, chiesto=500) == BUDGET_RAGIONAMENTO
+
+    async def test_chi_non_ragiona_riceve_quello_che_ha_chiesto(self):
+        """Su un modello diretto il pavimento sarebbe solo un tetto più alto
+        e inutile."""
+        assert await self._tetto(ragiona=False, chiesto=500) == 500
+
+    async def test_un_tetto_gia_alto_non_si_abbassa(self):
+        assert await self._tetto(ragiona=True, chiesto=20_000) == 20_000

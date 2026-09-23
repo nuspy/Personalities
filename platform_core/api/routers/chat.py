@@ -34,8 +34,7 @@ from ...billing.plans import GestoreAbbonamenti
 from ...billing.quote import ContatoreQuote, QuotaSuperata
 from ...billing.tariffe import costo_risposta
 from ...api.deps import (
-    aggiorna_assegnazioni, get_embedder, get_guardrail, get_llm_provider,
-    provider_per,
+    get_embedder, get_guardrail, get_llm_provider, provider_per,
 )
 from ...llm.compiti import Compito
 from ...domain.knowledge_models import CommercialCategory, Personality, PersonalityVersion
@@ -134,14 +133,6 @@ async def chat(
     guardrail: Annotated[RegistroGuardrail, Depends(get_guardrail)],
 ) -> StreamingResponse:
     """Manda un messaggio e ricevi la risposta mentre viene generata."""
-    # Chi serve quale compito può essere cambiato dalla console, e su
-    # un'altra replica: il registro si rilegge da sé con una scadenza breve.
-    # Qui e non prima perché serve una sessione; il modello della
-    # conversazione è già stato risolto dalle dipendenze, quindi un cambio
-    # vale dalla richiesta successiva — il giudice, risolto più sotto, lo
-    # segue subito.
-    await aggiorna_assegnazioni(session)
-
     repo = ConversationRepository(session)
     personalita_repo = PersonalityRepository(session)
 
