@@ -31,3 +31,11 @@ deploy/k8s/overlays/*/keycloak.env
 
 # Il kubeconfig del cluster di prova locale.
 deploy/k8s/.kube-locale*.yaml
+
+# La documentazione commerciale e tecnica resta fuori dal repository.
+# `docs/` contiene la proposta con il nome del cliente e il prezzo netto,
+# e il generatore che li produce: non hanno motivo di vivere nella storia
+# di un repository che un giorno potrebbe essere condiviso o reso pubblico.
+# I file restano sulla macchina; i documenti si rigenerano con
+# `node docs/generator/build_en.js` e `build_hu.js`.
+/docs/
