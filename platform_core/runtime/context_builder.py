@@ -207,13 +207,25 @@ class ContextBuilder:
         messaggi.extend(storico)
 
         testo_volatile = volatile.rendi()
-        if testo_volatile:
-            # In un messaggio di sistema a sé e non fuso con il primo: fonderli
-            # metterebbe materiale che cambia a ogni turno dentro il prefisso
-            # da riusare, annullando lo sconto per intero.
-            messaggi.append(Message(role="system", content=testo_volatile))
 
-        if domanda:
+        # **Lo strato volatile viaggia nel turno dell'utente, non in un
+        # secondo messaggio di sistema.** Due ragioni, e la prima è che
+        # altrimenti certi modelli non rispondono affatto: i template della
+        # famiglia Gemma — Bonsai 2 fra questi — sollevano
+        # «System message must be at the beginning» e la richiesta torna 500.
+        # Molti pretendono anche che utente e assistente si alternino, quindi
+        # nemmeno un messaggio utente a sé: passaggi e domanda stanno insieme.
+        #
+        # La seconda ragione è che resta fuori dal prefisso stabile, che era
+        # lo scopo del messaggio separato: il punto di cache è dopo il
+        # sistema, e tutto ciò che cambia a ogni turno viene dopo.
+        if testo_volatile and domanda:
+            messaggi.append(Message(
+                role="user", content=f"{testo_volatile}\n\n{domanda}",
+            ))
+        elif testo_volatile:
+            messaggi.append(Message(role="user", content=testo_volatile))
+        elif domanda:
             messaggi.append(Message(role="user", content=domanda))
 
         return ContestoCostruito(

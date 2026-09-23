@@ -242,6 +242,6 @@ class TestNelMotore:
             versione=self._versione(riscrivi_domanda=True), domanda="e sul tempo?",
         )
 
-        traccia = turno.traccia_risposta()["recupero_assistito"]
+        traccia = turno.traccia_risposta()["usage"]["recupero_assistito"]
         assert traccia["domanda_cercata"] == "Seneca sul tempo"
         assert turno.tempi_ms["riscrittura"] >= 0

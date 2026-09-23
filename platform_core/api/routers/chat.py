@@ -527,13 +527,14 @@ async def chat(
                         tokens=uso.to_dict() if uso else None,
                     )
                     if turno is not None:
+                        # Senza filtro: le chiavi della traccia sono i
+                        # parametri del repository, e se un giorno non lo
+                        # fossero più questa riga fallisce invece di
+                        # scartarle in silenzio.
                         await TraceRepository(scrittura).registra(
                             message_id=messaggio.id,
                             personality_version_id=versione_id,
-                            **{
-                                k: v for k, v in turno.traccia_risposta().items()
-                                if k in ("retrieved", "usage", "latency_ms")
-                            },
+                            **turno.traccia_risposta(),
                             grounding=esito.to_dict(),
                         )
                     await scrittura.commit()

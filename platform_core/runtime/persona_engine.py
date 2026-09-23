@@ -90,7 +90,16 @@ class EsitoTurno:
         return self.modo != self.modo_richiesto
 
     def traccia_risposta(self) -> Dict[str, Any]:
-        """Il contenuto di `answer_traces` per questo turno."""
+        """Il contenuto di `answer_traces` per questo turno.
+
+        **Le chiavi sono esattamente i parametri di `TraceRepository`**, e
+        tutto ciò che non è una colonna sta dentro `usage`. Non è pedanteria:
+        prima il router filtrava tre chiavi e scartava le altre in silenzio,
+        e due cose aggiunte qui — cosa aveva fatto la ricerca online, con
+        quale domanda si era cercato — non arrivavano mai al database. Una
+        traccia che perde pezzi senza dirlo è peggio di una traccia assente,
+        perché la si legge credendo che quei pezzi non ci fossero.
+        """
         return {
             "retrieved": self.recupero.to_dict() if self.recupero else None,
             "usage": {
@@ -104,18 +113,18 @@ class EsitoTurno:
                      "chiave": self.cache.chiave, "slot": self.cache.slot}
                     if self.cache else None
                 ),
+                "modo": {
+                    "usato": self.modo,
+                    "richiesto": self.modo_richiesto,
+                    "motivo": self.motivo_degrado,
+                },
+                **({"ricerca": self.ricerca} if self.ricerca else {}),
+                **(
+                    {"recupero_assistito": self.recupero_assistito}
+                    if self.recupero_assistito else {}
+                ),
             },
             "latency_ms": self.tempi_ms,
-            "modo": {
-                "usato": self.modo,
-                "richiesto": self.modo_richiesto,
-                "motivo": self.motivo_degrado,
-            },
-            **({"ricerca": self.ricerca} if self.ricerca else {}),
-            **(
-                {"recupero_assistito": self.recupero_assistito}
-                if self.recupero_assistito else {}
-            ),
         }
 
 

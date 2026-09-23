@@ -41,16 +41,23 @@ logger = logging.getLogger(__name__)
 #:
 #: Largo, e non perché servano risposte lunghe — una interrogazione sta in
 #: quindici parole e una selezione in cinque etichette. È che **un modello che
-#: ragiona spende il budget prima di cominciare a scrivere**: con un tetto da
-#: centoventi token esaurisce il ragionamento e restituisce testo vuoto, e la
-#: funzione ricade sull'originale a ogni chiamata senza che nulla sembri
-#: rotto. Misurato su Bonsai 2 27B, che ragiona: falliva sempre.
+#: ragiona spende il budget prima di cominciare a scrivere**, e se lo esaurisce
+#: restituisce testo vuoto: la funzione ricade sull'originale a ogni chiamata
+#: senza che nulla sembri rotto.
 #:
-#: Su un modello che non ragiona non costa niente: si ferma da sé quando ha
-#: finito, e il tetto resta un tetto. Le riscritture che divagano le scarta
-#: comunque il controllo sulla lunghezza, più sotto.
-TOKEN_DOMANDA = 900
-TOKEN_SELEZIONE = 900
+#: Misurato su Bonsai 2 27B con sette passaggi da scegliere:
+#:
+#:   900 → fallisce     1500 → fallisce     2500 → fallisce
+#:  4000 → «K1, K5», in 23 secondi
+#:
+#: Ventitré secondi sono tanti, e sono il prezzo vero di questo aiuto su un
+#: modello che ragiona: per questo si accende per personalità e la traccia
+#: registra `tempi_ms`. Su un modello che non ragiona il tetto non costa
+#: niente — si ferma da sé quando ha finito — e la risposta arriva in due
+#: secondi. Le riscritture che divagano le scarta comunque il controllo
+#: sulla lunghezza, più sotto.
+TOKEN_DOMANDA = 4000
+TOKEN_SELEZIONE = 4000
 
 #: Quanto di ciascun passaggio si mostra al selezionatore. Non serve tutto:
 #: per decidere se un passaggio c'entra bastano le prime righe, e mandarne

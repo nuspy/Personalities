@@ -98,7 +98,28 @@ services:
       PERSONA_DATABASE_URL: postgresql+psycopg://persona:persona@postgres:5432/persona
       PERSONA_REDIS_URL: redis://redis:6379/0
       PERSONA_KEYCLOAK_URL: http://keycloak:8080
+      # **Due indirizzi, e servono entrambi.** Le chiavi si leggono dal
+      # servizio interno (la riga sopra); l'emittente scritto nei token è
+      # quello con cui il browser ha fatto il login, cioè `localhost:8080`.
+      # Senza questa riga l'API containerizzata rifiuta ogni token vero con
+      # un 401 che sembra un problema di credenziali: `start-dev` ricava
+      # l'emittente dall'indirizzo della richiesta, e dall'host quello è
+      # sempre localhost. In produzione lo mette l'overlay; qui mancava, e
+      # funzionava solo perché l'API girava sulla macchina invece che in
+      # Compose.
+      PERSONA_KEYCLOAK_ISSUER_URL: ${PERSONA_KEYCLOAK_ISSUER_URL:-http://localhost:8080}
       PERSONA_OTLP_ENDPOINT: http://otel-collector:4318
+      # I modelli girano **sulla macchina**, non nella rete di Compose: da
+      # dentro un container `127.0.0.1` è il container stesso, e il valore
+      # predefinito delle impostazioni punterebbe a nulla. È il difetto che
+      # si manifesta come «il recupero non trova niente».
+      PERSONA_LLM_BASE_URL: ${PERSONA_LLM_BASE_URL:-http://host.docker.internal:1234/v1}
+      PERSONA_EMBEDDING_BASE_URL: ${PERSONA_EMBEDDING_BASE_URL:-http://host.docker.internal:1234/v1}
+      # Vuoto (`[]`) significa: un modello solo, dalle due righe qui sopra. Si
+      # passa un elenco JSON dalla shell per provarne più d'uno.
+      PERSONA_MODELLI: ${PERSONA_MODELLI:-[]}
+      PERSONA_RICERCA_PROVIDER: ${PERSONA_RICERCA_PROVIDER:-disattivata}
+      PERSONA_RICERCA_BASE_URL: ${PERSONA_RICERCA_BASE_URL:-http://firecrawl:3002}
     ports:
       - "8100:8100"
     volumes:
@@ -120,6 +141,17 @@ services:
       PERSONA_DATABASE_URL: postgresql+psycopg://persona:persona@postgres:5432/persona
       PERSONA_REDIS_URL: redis://redis:6379/0
       PERSONA_OTLP_ENDPOINT: http://otel-collector:4318
+      # I modelli girano **sulla macchina**, non nella rete di Compose: da
+      # dentro un container `127.0.0.1` è il container stesso, e il valore
+      # predefinito delle impostazioni punterebbe a nulla. È il difetto che
+      # si manifesta come «il recupero non trova niente».
+      PERSONA_LLM_BASE_URL: ${PERSONA_LLM_BASE_URL:-http://host.docker.internal:1234/v1}
+      PERSONA_EMBEDDING_BASE_URL: ${PERSONA_EMBEDDING_BASE_URL:-http://host.docker.internal:1234/v1}
+      # Vuoto (`[]`) significa: un modello solo, dalle due righe qui sopra. Si
+      # passa un elenco JSON dalla shell per provarne più d'uno.
+      PERSONA_MODELLI: ${PERSONA_MODELLI:-[]}
+      PERSONA_RICERCA_PROVIDER: ${PERSONA_RICERCA_PROVIDER:-disattivata}
+      PERSONA_RICERCA_BASE_URL: ${PERSONA_RICERCA_BASE_URL:-http://firecrawl:3002}
     volumes:
       - ./platform_core:/app/platform_core
     depends_on:

@@ -20,6 +20,7 @@ from platform_core.knowledge.vector_store import Corrispondenza
 from platform_core.runtime.context_builder import (
     ContextBuilder, StratoStabile, StratoVolatile,
 )
+from platform_core.llm.base import Message
 from platform_core.runtime.persona_engine import riferimenti_citati
 
 
@@ -205,3 +206,69 @@ class TestStruttura:
 
         assert contesto.caratteri_stabili > 0
         assert contesto.caratteri_volatili > 500
+
+
+class TestCompatibilitaDeiTemplate:
+    """La forma del prompt deve passare dai template più severi.
+
+    Non è teoria: con lo strato volatile in un secondo messaggio di sistema,
+    Bonsai 2 27B rispondeva `500 — System message must be at the beginning`
+    e la chat non produceva una sola parola. I template della famiglia Gemma
+    pretendono il sistema in testa e l'alternanza fra utente e assistente;
+    romperli non dà una risposta peggiore, non dà risposta.
+    """
+
+    def test_un_solo_messaggio_di_sistema_e_sta_in_testa(self, stabile):
+        volatile = StratoVolatile(
+            memorie=["vive a Budapest"],
+            riassunto_sessione="si parlava del tempo",
+            passaggi=[passaggio("K1", "Non abbiamo poco tempo.")],
+        )
+
+        contesto = ContextBuilder().costruisci(
+            stabile=stabile,
+            volatile=volatile,
+            storico=[
+                Message(role="user", content="prima domanda"),
+                Message(role="assistant", content="prima risposta"),
+            ],
+            domanda="e del tempo?",
+        )
+        ruoli = [m.role for m in contesto.messaggi]
+
+        assert ruoli[0] == "system"
+        assert "system" not in ruoli[1:], (
+            f"un sistema fuori posto: {ruoli}"
+        )
+
+    def test_utente_e_assistente_si_alternano(self, stabile):
+        """Due messaggi utente di fila sono l'altra cosa che quei template
+        rifiutano: i passaggi viaggiano insieme alla domanda, non prima."""
+        volatile = StratoVolatile(memorie=["una memoria qualunque"])
+
+        contesto = ContextBuilder().costruisci(
+            stabile=stabile,
+            volatile=volatile,
+            storico=[
+                Message(role="user", content="prima domanda"),
+                Message(role="assistant", content="prima risposta"),
+            ],
+            domanda="seconda domanda",
+        )
+        ruoli = [m.role for m in contesto.messaggi]
+
+        for precedente, seguente in zip(ruoli[1:], ruoli[2:]):
+            assert precedente != seguente, f"due «{precedente}» di fila: {ruoli}"
+
+    def test_i_passaggi_restano_fuori_dal_prefisso_stabile(self, stabile):
+        """Era la ragione del messaggio separato, e va conservata: il punto
+        di cache resta dopo il sistema, e ciò che cambia viene dopo."""
+        volatile = StratoVolatile(memorie=["cambia a ogni turno"])
+
+        contesto = ContextBuilder().costruisci(
+            stabile=stabile, volatile=volatile, domanda="?",
+        )
+
+        assert contesto.punto_di_cache == 0
+        assert "cambia a ogni turno" not in contesto.testo_stabile
+        assert "cambia a ogni turno" in contesto.messaggi[-1].content

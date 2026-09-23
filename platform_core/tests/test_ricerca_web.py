@@ -346,7 +346,7 @@ class TestNelMotore:
             self._motore(ricerca), versione({"attiva": True, "modo": "anche"}),
         )
 
-        assert turno.traccia_risposta()["ricerca"]["fornitore"] == "finta"
+        assert turno.traccia_risposta()["usage"]["ricerca"]["fornitore"] == "finta"
         assert turno.tempi_ms["ricerca_online"] >= 0
 
     async def test_i_passaggi_web_non_entrano_nello_strato_stabile(self):
